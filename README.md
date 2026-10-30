@@ -3206,7 +3206,6 @@ local function wrapTab(tab)
     function wrapped:Slider(opts)
         opts = opts or {}
         local name = opts.Name or opts.Title or opts.Text or "Slider"
-        local iconKey = opts.Icon
         opts.Title = name
         opts.Min = opts.Min or opts.Minimum or 0
         opts.Max = opts.Max or opts.Maximum or 100
@@ -3228,43 +3227,7 @@ local function wrapTab(tab)
         local frame = tab.Page:GetChildren()[#tab.Page:GetChildren()]
         if frame then
             local lbl = frame:FindFirstChild("Title")
-            if lbl then
-                registerTranslation(name, lbl, false)
-                if iconKey and Library.Icons then
-                    local clean = tostring(iconKey):gsub("[-_ %s]", ""):lower()
-                    local asset = Library.Icons[iconKey]
-                    if not asset then
-                        for k, v in pairs(Library.Icons) do
-                            if k:lower() == clean then asset = v break end
-                        end
-                    end
-                    if asset then
-                        lbl.Position = UDim2.new(0, 36, 0, 6)
-                        local badge = Instance.new("Frame")
-                        badge.Name = "IconBadge"
-                        badge.Size = UDim2.new(0, 20, 0, 20)
-                        badge.Position = UDim2.new(0, 8, 0, 4)
-                        badge.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
-                        badge.BorderSizePixel = 0
-                        badge.Parent = frame
-                        local cr = Instance.new("UICorner")
-                        cr.CornerRadius = UDim.new(0, 4)
-                        cr.Parent = badge
-                        local st = Instance.new("UIStroke")
-                        st.Color = Color3.fromRGB(30, 45, 65)
-                        st.Thickness = 0.8
-                        st.Parent = badge
-                        local img = Instance.new("ImageLabel")
-                        img.Size = UDim2.new(0, 12, 0, 12)
-                        img.AnchorPoint = Vector2.new(0.5, 0.5)
-                        img.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        img.BackgroundTransparency = 1
-                        img.Image = asset
-                        img.ImageColor3 = Color3.fromRGB(0, 230, 255)
-                        img.Parent = badge
-                    end
-                end
-            end
+            if lbl then registerTranslation(name, lbl, false) end
         end
         return sObj
     end
@@ -3274,51 +3237,18 @@ local function wrapTab(tab)
     function wrapped:Dropdown(opts)
         opts = opts or {}
         local name = opts.Name or opts.Title or opts.Text or "Dropdown"
-        local iconKey = opts.Icon
         opts.Title = name
         opts.Values = opts.Options or opts.Values or {}
-        local dObj = (opts.Multi or opts.MultiSelect) and tab:CreateMultiDropdown(opts) or tab:CreateDropdown(opts)
+        local dObj
+        if opts.Multi or opts.MultiSelect then
+            dObj = tab:CreateMultiDropdown(opts)
+        else
+            dObj = tab:CreateDropdown(opts)
+        end
         local frame = tab.Page:GetChildren()[#tab.Page:GetChildren()]
         if frame then
-            local topBtn = frame:FindFirstChildOfClass("TextButton")
-            local lbl = topBtn and topBtn:FindFirstChild("Title") or frame:FindFirstChild("Title")
-            if lbl then
-                registerTranslation(name, lbl, false)
-                if iconKey and Library.Icons then
-                    local clean = tostring(iconKey):gsub("[-_ %s]", ""):lower()
-                    local asset = Library.Icons[iconKey]
-                    if not asset then
-                        for k, v in pairs(Library.Icons) do
-                            if k:lower() == clean then asset = v break end
-                        end
-                    end
-                    if asset then
-                        lbl.Position = UDim2.new(0, 36, 0.5, -9)
-                        local badge = Instance.new("Frame")
-                        badge.Name = "IconBadge"
-                        badge.Size = UDim2.new(0, 20, 0, 20)
-                        badge.Position = UDim2.new(0, 8, 0.5, -10)
-                        badge.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
-                        badge.BorderSizePixel = 0
-                        badge.Parent = topBtn or frame
-                        local cr = Instance.new("UICorner")
-                        cr.CornerRadius = UDim.new(0, 4)
-                        cr.Parent = badge
-                        local st = Instance.new("UIStroke")
-                        st.Color = Color3.fromRGB(30, 45, 65)
-                        st.Thickness = 0.8
-                        st.Parent = badge
-                        local img = Instance.new("ImageLabel")
-                        img.Size = UDim2.new(0, 12, 0, 12)
-                        img.AnchorPoint = Vector2.new(0.5, 0.5)
-                        img.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        img.BackgroundTransparency = 1
-                        img.Image = asset
-                        img.ImageColor3 = Color3.fromRGB(0, 230, 255)
-                        img.Parent = badge
-                    end
-                end
-            end
+            local lbl = frame:FindFirstChild("Title")
+            if lbl then registerTranslation(name, lbl, false) end
         end
         return dObj
     end
@@ -3353,8 +3283,8 @@ W.Tab = function(self, opts)
     local name = type(opts) == "table" and (opts.Name or opts.Title or opts[1]) or tostring(opts)
     local icon = type(opts) == "table" and (opts.Icon or opts[2]) or "Gamepad"
     local iconMap = {
-        ["egg"] = "Egg",
-        ["calendar-star"] = "Calendar",
+        ["egg"] = "Gamepad",
+        ["calendar-star"] = "Flame",
         ["four-squares-grid"] = "Sliders",
         ["person-teleport"] = "Compass",
         ["gear"] = "Settings",
@@ -3365,20 +3295,43 @@ W.Tab = function(self, opts)
 end
 
 local pg = W:Tab({Name = "General", Icon = "egg"})
+
 local function getSortedRarityList()
     local m, o = {}, {}
     for _, a in pairs(AssetDirectory) do
         local r = type(a) == "table" and a.Rarity
         if type(r) == "table" and type(r._id) == "string" and not m[r._id] then
             m[r._id] = true
-            o[#o + 1] = {n = r._id, k = tonumber(r.Rank) or 0}
+            o[#o + 1] = r
         end
     end
-    table.sort(o, function(x, y) return x.k < y.k end)
-    local l = {}
-    for _, v in ipairs(o) do l[#l + 1] = v.n end
-    return l
+    table.sort(o, function(x, y) return (tonumber(x.Rank) or 0) < (tonumber(y.Rank) or 0) end)
+    local n = {}
+    for _, r in o do n[#n + 1] = r._id end
+    return n
 end
+
+local function rs2(v)
+    local t = {}
+    for _, x in v or {} do t[x] = true end
+    return t
+end
+
+local function an()
+    local w = workspace:FindFirstChild("World") or workspace:FindFirstChild("__OBJECTS")
+    local a = w and w:FindFirstChild("Areas")
+    local g = a and a:FindFirstChild("GuardAreas")
+    local o = {}
+    for _, z in g and g:GetChildren() or {} do
+        local b = z:FindFirstChild("Bounds")
+        if b and b:IsA("BasePart") then o[#o + 1] = {z.Name, b.Position.X - b.Size.X / 2} end
+    end
+    table.sort(o, function(x, y) return x[2] < y[2] end)
+    local n = {}
+    for _, v in o do n[#n + 1] = v[1] end
+    return n
+end
+
 local ra = getSortedRarityList()
 pg:Section({Name = "Farm"})
 local xe, xa
@@ -3438,7 +3391,7 @@ local xh = pg:Toggle({
 State.ah = xh.v == true
 pg:Toggle({
     Name = "Pet Index",
-    Icon = "Bookmark",
+    Icon = "Star",
     Description = "Prioritize uncollected eggs for index unlock",
     Default = false,
     Flag = "pix",
@@ -3446,12 +3399,13 @@ pg:Toggle({
 })
 pg:Button({
     Name = "Leave Treadmill",
-    Icon = "LogOut",
+    Icon = "Power",
     Description = "Instantly exit treadmill machine",
     Callback = function()
-        local ok, wy = leaveTreadmill()
-        updateStatusLog(ok and "Left Treadmill" or tostring(wy))
-        W:Notify({Title = "Leave Treadmill", Text = ok and "Left Treadmill" or tostring(wy), Error = not ok})
+        local ok, wy = false, "Treadmill Failed: Not Mounted"
+        if State.bt or getActiveTreadmillModel() then ok, wy = leaveTreadmill() end
+        updateStatusLog(ok and "Treadmill Left" or tostring(wy))
+        W:Notify({Title = "Leave Treadmill", Text = ok and "Treadmill Left" or tostring(wy), Error = not ok})
     end
 })
 
@@ -3463,7 +3417,7 @@ pg:Dropdown({
     Multi = true,
     Default = {},
     Flag = "spr",
-    Callback = function(v) State.ps = rs2(v) end
+    Callback = function(v) State.sp = rs2(v) end
 })
 pg:Toggle({
     Name = "Auto Sell Pet",
@@ -3471,7 +3425,7 @@ pg:Toggle({
     Description = "Auto sell hatched pets matching selected rarities",
     Default = false,
     Flag = "asp",
-    Callback = function(v) State.sp = v == true end
+    Callback = function(v) State.ps = v end
 })
 
 pg:Section({Name = "Egg"})
@@ -3482,7 +3436,7 @@ pg:Dropdown({
     Multi = true,
     Default = {},
     Flag = "ser",
-    Callback = function(v) State.es = rs2(v) end
+    Callback = function(v) State.se = rs2(v) end
 })
 pg:Toggle({
     Name = "Auto Sell Egg",
@@ -3490,7 +3444,7 @@ pg:Toggle({
     Description = "Auto sell unhatched inventory eggs matching rarities",
     Default = false,
     Flag = "ase",
-    Callback = function(v) State.se = v == true end
+    Callback = function(v) State.es = v end
 })
 
 local et = W:Tab({Name = "Event", Icon = "calendar-star"})
@@ -3499,13 +3453,6 @@ local xb = et:Label({Text = bc()})
 task.spawn(function()
     while globalEnv.__SaeAf == State do
         pcall(function() xb:Set(bc()) end)
-        task.wait(0.5)
-    end
-end)
-local xs = et:Label({Text = bb()})
-task.spawn(function()
-    while globalEnv.__SaeAf == State do
-        pcall(function() xs:Set(bb()) end)
         task.wait(1)
     end
 end)
@@ -3536,19 +3483,22 @@ et:Button({
 
 et:Section({Name = "Halloween"})
 local function hq()
-    if not (State.hd or State.hm or State.hx) then
-        State.hg += 1
+    if not (State.hd or State.hm or State.hx) then return end
+    if not isKeyValid() then
+        updateStatusLog("Key Check Failed: No Valid Key")
         return
+    end
+    for _, k in {"ae", "abf", "arl", "atx"} do
+        local x = rawget(State.ui, k)
+        if x and x.v then x:Set(false) end
     end
     if State.hl then return end
     State.hg += 1
     task.spawn(startAutoHalloweenThread, State.hg)
 end
 local function hz3(v)
-    local x = rawget(State.ui, "ae")
+    local x = rawget(State.ui, "ahd")
     if v and x and x.v then x:Set(false) end
-    State.hd, State.hm, State.hx = v == true, v == true, v == true
-    hq()
 end
 State.ui.ahd = et:Toggle({
     Name = "Auto Halloween",
@@ -3556,7 +3506,10 @@ State.ui.ahd = et:Toggle({
     Description = "Farm Halloween candies, souls & ghost train boss",
     Default = false,
     Flag = "ahd",
-    Callback = hz3
+    Callback = function(v)
+        State.hd, State.hm, State.hx = v == true, v == true, v == true
+        hq()
+    end
 })
 
 et:Section({Name = "Admin"})
@@ -3567,25 +3520,23 @@ State.ui.arl = et:Toggle({
     Default = false,
     Flag = "arl",
     Callback = function(v)
-        State.lx = v == true
-        if State.lx then
-            State.gg += 1
-            task.spawn(startAutoMinigameThread, State.gg, RedLightConfig)
-        end
+        hz3(v)
+        State.gx = v == true
+        State.gg += 1
+        if State.gx then task.spawn(startAutoMinigameThread, State.gg, lc) end
     end
 })
 State.ui.atx = et:Toggle({
     Name = "Auto T-Rex Run",
-    Icon = "Footprints",
+    Icon = "Gamepad",
     Description = "Auto run & dodge obstacles in T-Rex temple run",
     Default = false,
     Flag = "atx",
     Callback = function(v)
-        State.tx = v == true
-        if State.tx then
-            State.gg += 1
-            task.spawn(startAutoMinigameThread, State.gg, TRexConfig)
-        end
+        hz3(v)
+        State.tq = v == true
+        State.th += 1
+        if State.tq then task.spawn(startAutoMinigameThread, State.th, tc2) end
     end
 })
 
@@ -3659,23 +3610,23 @@ local lgv, lgd = false, {
     ["Sell Egg Rarity"] = "Độ Hiếm Trứng Cần Bán",
     ["Auto Sell Egg"] = "Tự Động Bán Trứng",
     ["Auto Butterfly"] = "Tự Động Bắt Bướm",
-    ["Teleport To Station"] = "Dịch Chuyển Đến Trạm",
+    ["Teleport To Station"] = "Dịch Chuyển Tới Nhà Ga",
     ["Auto Halloween"] = "Tự Động Halloween",
-    ["Auto Red Light Green Light"] = "Tự Động Đèn Đỏ Đèn Xanh",
+    ["Auto Red Light Green Light"] = "Tự Động Đèn Xanh Đèn Đỏ",
     ["Auto T-Rex Run"] = "Tự Động Chạy T-Rex",
     ["Anti Stun"] = "Chống Choáng",
     ["Anti Trap"] = "Chống Bẫy",
     ["Hop Server"] = "Đổi Server",
     ["Hop Low Server"] = "Đổi Server Ít Người",
-    ["FPS Booster"] = "Tăng Tốc Game",
+    ["FPS Booster"] = "Tăng FPS",
     ["Select Language"] = "Chọn Ngôn Ngữ",
+    ["Steal Hop Distance"] = "Steal: Khoảng Nhảy",
+    ["Steal Drop Wait"] = "Steal: Chờ Drop",
+    ["Steal Drop Every (Zones)"] = "Steal: Drop Mỗi (Khu)",
+    ["Halloween Hop Distance"] = "Halloween: Khoảng Nhảy",
+    ["Halloween Drop Wait"] = "Halloween: Chờ Drop",
+    ["Halloween Drop Every (Studs)"] = "Halloween: Drop Mỗi (Stud)",
     ["Default Setting"] = "Cài Đặt Mặc Định",
-    ["Steal Hop Distance"] = "Khoảng Cách Nhảy Trộm",
-    ["Steal Drop Wait"] = "Thời Gian Chờ Thả Trộm",
-    ["Steal Drop Every (Zones)"] = "Thả Sau Mỗi (Khu Vực)",
-    ["Halloween Hop Distance"] = "Khoảng Cách Nhảy Halloween",
-    ["Halloween Drop Wait"] = "Thời Gian Chờ Thả Halloween",
-    ["Halloween Drop Every (Studs)"] = "Thả Sau Mỗi (Studs)",
     ["Farm"] = "Nông Trại",
     ["Pet"] = "Thú Cưng",
     ["Egg"] = "Trứng",
@@ -3708,25 +3659,14 @@ local lgv, lgd = false, {
 
 local function applyLanguageTranslations()
     for _, item in ipairs(translatableElements) do
-        pcall(function()
-            if item.label and item.label.Parent then
-                local en = item.en
-                local vi = lgd[en]
-                if lgv and vi then
-                    if item.isSection then
-                        item.label.Text = vi:upper()
-                    else
-                        item.label.Text = vi
-                    end
-                else
-                    if item.isSection then
-                        item.label.Text = en:upper()
-                    else
-                        item.label.Text = en
-                    end
-                end
+        if item.label and item.label.Parent then
+            local text = lgv and (lgd[item.en] or item.en) or item.en
+            if item.isSection then
+                pcall(function() item.label.Text = string.upper(text) end)
+            else
+                pcall(function() item.label.Text = text end)
             end
-        end)
+        end
     end
 end
 
@@ -3745,24 +3685,15 @@ tz:Dropdown({
 
 local sdf = {}
 for _, r in {
-    {"Steal Hop Distance", "shd", 50, 400, 1, "hs", "Move"},
-    {"Steal Drop Wait", "sdw", 0, 2, 0.05, "dw", "Clock"},
-    {"Steal Drop Every (Zones)", "srz", 1, 6, 1, "rz", "Layers"},
-    {"Halloween Hop Distance", "hhd", 50, 400, 1, "hk", "Move"},
-    {"Halloween Drop Wait", "hdw", 0, 2, 0.05, "hw", "Clock"},
-    {"Halloween Drop Every (Studs)", "hdr", 100, 1500, 1, "hr", "Layers"},
+    {"Steal Hop Distance", "shd", 50, 400, 1, "hs"},
+    {"Steal Drop Wait", "sdw", 0, 2, 0.05, "dw"},
+    {"Steal Drop Every (Zones)", "srz", 1, 6, 1, "rz"},
+    {"Halloween Hop Distance", "hhd", 50, 400, 1, "hk"},
+    {"Halloween Drop Wait", "hdw", 0, 2, 0.05, "hw"},
+    {"Halloween Drop Every (Studs)", "hdr", 100, 1500, 1, "hr"},
 } do
     local k, d0 = r[6], State[r[6]]
-    local e = tz:Slider({
-        Name = r[1],
-        Icon = r[7],
-        Flag = r[2],
-        Min = r[3],
-        Max = r[4],
-        Step = r[5],
-        Default = d0,
-        Callback = function(v) State[k] = v end
-    })
+    local e = tz:Slider({Name = r[1], Flag = r[2], Min = r[3], Max = r[4], Step = r[5], Default = d0, Callback = function(v) State[k] = v end})
     State[k], sdf[#sdf + 1] = e.v, {e, d0}
 end
 tz:Button({
