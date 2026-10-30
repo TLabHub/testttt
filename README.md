@@ -1,5 +1,4 @@
 
-
 -- ============================================================================
 -- ngao_deobf.lua - Deobfuscated & Semantically Refactored
 -- Project: Steal An Egg (Ngao - Gaming Hub)
@@ -85,12 +84,12 @@ do
 end
 
 local AssetEarningsModule, FormatNumberUtil
-do
-    local o1, m1 = pcall(require, ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Util"):WaitForChild("AssetEarnings"))
-    if o1 then AssetEarningsModule = m1 end
-    local o2, m2 = pcall(require, ReplicatedStorage:WaitForChild("Packages"):WaitForChild("FormatNumber"):WaitForChild("Simple"))
-    if o2 then FormatNumberUtil = m2 end
-end
+task.spawn(function()
+    local o1, m1 = pcall(function() return require(ReplicatedStorage.Shared.Util.AssetEarnings) end)
+    if o1 and m1 then AssetEarningsModule = m1 end
+    local o2, m2 = pcall(function() return require(ReplicatedStorage.Packages.FormatNumber.Simple) end)
+    if o2 and m2 then FormatNumberUtil = m2 end
+end)
 
 local function formatCompactValue(v)
     if not v or v <= 0 then return "" end
@@ -237,12 +236,12 @@ local State = {
     customSpeed = 24,
     infJump = false,
     noclip = false,
-    antiAfk = true,
+    antiAfk = false,
 
     -- [Security: Staff & Moderator Detector]
-    staffDetector = true,
-    staffAction = "Server Hop",
-    autoRejoin = true
+    staffDetector = false,
+    staffAction = "Stop Farm",
+    autoRejoin = false
 }
 globalEnv.__SaeAf = State
 
@@ -3208,13 +3207,22 @@ local function updateEggESP()
     end
 end
 
-task.spawn(function()
-    while globalEnv.__SaeAf == State do
-        pcall(updateEggESP)
-        task.wait(0.25)
+local espRunning = false
+local function syncEspLoop()
+    if State.espEnabled and not espRunning then
+        espRunning = true
+        task.spawn(function()
+            while State.espEnabled and globalEnv.__SaeAf == State do
+                pcall(updateEggESP)
+                task.wait(0.25)
+            end
+            espRunning = false
+            clearAllEggESP()
+        end)
+    elseif not State.espEnabled then
+        clearAllEggESP()
     end
-    clearAllEggESP()
-end)
+end
 
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
@@ -3266,7 +3274,7 @@ local function isStaffMember(player)
     end
     if game.CreatorType == Enum.CreatorType.Group and game.CreatorId > 0 then
         local ok, r = pcall(player.GetRankInGroup, player, game.CreatorId)
-        if ok and type(r) == "number" and r >= 100 then
+        if ok and type(r) == "number" and r >= 254 then
             return true
         end
     end
@@ -3295,8 +3303,11 @@ local function onPlayerInspected(player)
     end
 end
 
-for _, p in ipairs(Players:GetPlayers()) do onPlayerInspected(p) end
-Players.PlayerAdded:Connect(onPlayerInspected)
+Players.PlayerAdded:Connect(function(p)
+    if State.staffDetector then
+        onPlayerInspected(p)
+    end
+end)
 
 pcall(function()
     local GuiService = game:GetService("GuiService")
@@ -3501,7 +3512,7 @@ do
     ThumbImg.Size = UDim2.new(1, -4, 1, -4)
     ThumbImg.Position = UDim2.new(0, 2, 0, 2)
     ThumbImg.BackgroundTransparency = 1
-    ThumbImg.Image = "rbxthumb://type=GameIcon&id=" .. game.PlaceId .. "&w=150&h=150"
+    ThumbImg.Image = "rbxthumb://type=GameIcon&id=" .. (game.GameId > 0 and game.GameId or game.PlaceId) .. "&w=150&h=150"
     ThumbImg.Parent = ThumbFrame
 
     local tCorner = Instance.new("UICorner")
@@ -4019,7 +4030,10 @@ vs:Toggle({
     Description = "3D billboard tracker with rarity color codes",
     Default = false,
     Flag = "eesp",
-    Callback = function(v) State.espEnabled = (v == true) end
+    Callback = function(v)
+        State.espEnabled = (v == true)
+        syncEspLoop()
+    end
 })
 
 vs:Toggle({
@@ -4170,11 +4184,10 @@ local antiTrapToggle = mi:Toggle({
     Name = "Anti Trap",
     Icon = "Shield",
     Description = "Disable touch traps and bear traps in enemy bases",
-    Default = true,
+    Default = false,
     Flag = "atr",
     Callback = function(v) toggleAntiTrap(v == true) end
 })
-if antiTrapToggle.v then toggleAntiTrap(true) end
 
 mi:Section({Name = "Player Movement"})
 mi:Toggle({
@@ -4219,7 +4232,7 @@ mi:Toggle({
     Name = "Anti AFK",
     Icon = "Moon",
     Description = "Prevents Roblox 20-minute idle disconnect 24/7",
-    Default = true,
+    Default = false,
     Flag = "aafk",
     Callback = function(v) State.antiAfk = (v == true) end
 })
@@ -4229,16 +4242,21 @@ mi:Toggle({
     Name = "Staff Detector",
     Icon = "ShieldAlert",
     Description = "Detects Admin, Developer or Creator presence",
-    Default = true,
+    Default = false,
     Flag = "sdt",
-    Callback = function(v) State.staffDetector = (v == true) end
+    Callback = function(v)
+        State.staffDetector = (v == true)
+        if State.staffDetector then
+            for _, p in ipairs(Players:GetPlayers()) do onPlayerInspected(p) end
+        end
+    end
 })
 
 mi:Dropdown({
     Name = "Staff Action",
     Icon = "Sliders",
-    Options = {"Server Hop", "Stop Farm"},
-    Default = "Server Hop",
+    Options = {"Stop Farm", "Server Hop"},
+    Default = "Stop Farm",
     Flag = "sda",
     Callback = function(v) State.staffAction = v end
 })
@@ -4247,7 +4265,7 @@ mi:Toggle({
     Name = "Auto Rejoin",
     Icon = "RefreshCw",
     Description = "Auto reconnects on server kicks or network errors",
-    Default = true,
+    Default = false,
     Flag = "arj",
     Callback = function(v) State.autoRejoin = (v == true) end
 })
