@@ -82,26 +82,6 @@ do
     end
     EggStateModule, AssetsData, AreaEggSlotIdentity, AreaEggCycle, RagdollModule, AssetItemsUtil, EggRecordsUtil, SaveModule, RemotesModule = table.unpack(o, 1, 9)
 end
-
-local AssetEarningsModule, FormatNumberUtil
-task.spawn(function()
-    local o1, m1 = pcall(function() return require(ReplicatedStorage.Shared.Util.AssetEarnings) end)
-    if o1 and m1 then AssetEarningsModule = m1 end
-    local o2, m2 = pcall(function() return require(ReplicatedStorage.Packages.FormatNumber.Simple) end)
-    if o2 and m2 then FormatNumberUtil = m2 end
-end)
-
-local function formatCompactValue(v)
-    if not v or v <= 0 then return "" end
-    if FormatNumberUtil and FormatNumberUtil.FormatCompact then
-        local ok, s = pcall(FormatNumberUtil.FormatCompact, v)
-        if ok and s then return s end
-    end
-    if v >= 1e9 then return string.format("%.2fB", v / 1e9)
-    elseif v >= 1e6 then return string.format("%.2fM", v / 1e6)
-    elseif v >= 1e3 then return string.format("%.2fK", v / 1e3)
-    else return tostring(math.floor(v)) end
-end
 local AssetDirectory = AssetsData.Directory or AssetsData
 do
     local t0 = os.clock()
@@ -217,31 +197,7 @@ local State = {
     gbd = 20,               -- Guard Boundary Distance Threshold
     cs = nil,               -- Current Plot State Cache
     rtn = 0,                -- Return Home Retry Counter
-    hs = 264,               -- Teleport Hop Step Distance
-
-    -- [Visuals & 3D ESP Tracker]
-    espEnabled = false,
-    espShowValue = true,
-    espShowDist = true,
-    espChams = false,
-    espMinRarity = "All",
-
-    -- [Smart Egg Prioritization & Fast Delivery]
-    smartPrioritize = true,
-    minEggValue = 0,
-    fastDeposit = true,
-
-    -- [Player Enhancements & Anti-AFK]
-    speedBoost = false,
-    customSpeed = 24,
-    infJump = false,
-    noclip = false,
-    antiAfk = false,
-
-    -- [Security: Staff & Moderator Detector]
-    staffDetector = false,
-    staffAction = "Stop Farm",
-    autoRejoin = false
+    hs = 264                -- Teleport Hop Step Distance
 }
 globalEnv.__SaeAf = State
 
@@ -349,40 +305,13 @@ local function getCandidateFieldEggs()
     for _, r in s.Records or {} do
         local a = AssetDirectory[r.AssetCategory]
         local wt
-        if State.wf then
-            wt = State.wf.a and r.AreaId == State.wf.a or State.wf.r and a and a.Rarity and a.Rarity._id == State.wf.r or false
-        elseif State.pi then
-            wt = ix[r.AssetCategory] ~= true and not oc[r.AssetCategory]
-        elseif next(State.az) then
-            wt = State.az[r.AreaId] == true
-        else
-            wt = a and a.Rarity and State.mr[a.Rarity._id]
-        end
+        if State.wf then wt = State.wf.a and r.AreaId == State.wf.a or State.wf.r and a and a.Rarity and a.Rarity._id == State.wf.r or false elseif State.pi then wt = ix[r.AssetCategory] ~= true and not oc[r.AssetCategory] elseif next(State.az) then wt = State.az[r.AreaId] == true else wt = a and a.Rarity and State.mr[a.Rarity._id] end
         if a and (r.State == "Slot" or r.State == "Dropped") and typeof(r.BoundsCFrame) == "CFrame" and (State.bl[r.Uid] or 0) < t and wt then
-            local val = tonumber(a.EarningRate) or 0
-            if AssetEarningsModule and type(AssetEarningsModule.MutationOnlyRatePerSecond) == "function" then
-                local okRate, calcRate = pcall(AssetEarningsModule.MutationOnlyRatePerSecond, {Category = r.AssetCategory, Scale = r.AssetScale, Mutations = r.Mutations or {}})
-                if okRate and type(calcRate) == "number" and calcRate > 0 then
-                    val = calcRate
-                end
-            end
-            if not (State.minEggValue and State.minEggValue > 0 and val < State.minEggValue) then
-                o[#o + 1] = {
-                    u = r.Uid,
-                    r = r,
-                    k = tonumber(a.Rarity and a.Rarity.Rank) or 0,
-                    e = tonumber(a.EarningRate) or 0,
-                    val = val,
-                    p = r.BoundsCFrame.Position
-                }
-            end
+            o[#o + 1] = {u = r.Uid, r = r, k = tonumber(a.Rarity and a.Rarity.Rank) or 0, e = tonumber(a.EarningRate) or 0, p = r.BoundsCFrame.Position}
         end
     end
     table.sort(o, function(x, y)
         if (x.u == State.pu) ~= (y.u == State.pu) then return x.u == State.pu end
-        if State.smartPrioritize and x.val ~= y.val then
-            return x.val > y.val
-        end
         if x.e ~= y.e then return x.e > y.e end
         return x.k > y.k
     end)
@@ -3023,306 +2952,6 @@ task.spawn(function()
 end)
 
 -- ============================================================================
--- ============================================================================
--- [8.5] Advanced Meta Enhancements: Egg Visuals (ESP), Player Physics & Security
--- ============================================================================
-
-local RarityColors = {
-    Common = Color3.fromRGB(200, 200, 200),
-    Uncommon = Color3.fromRGB(80, 220, 80),
-    Rare = Color3.fromRGB(60, 160, 255),
-    Epic = Color3.fromRGB(180, 70, 255),
-    Legendary = Color3.fromRGB(255, 185, 30),
-    Mythic = Color3.fromRGB(255, 50, 70),
-    Secret = Color3.fromRGB(0, 255, 240),
-    Titan = Color3.fromRGB(255, 235, 59),
-}
-
-local RarityRankMap = {
-    ["All"] = 0,
-    ["Uncommon+"] = 2,
-    ["Rare+"] = 3,
-    ["Epic+"] = 4,
-    ["Legendary+"] = 5,
-    ["Mythic+"] = 6,
-    ["Secret+"] = 7,
-    ["Titan"] = 8
-}
-
-local espContainer = nil
-local activeEspNodes = {}
-
-local function getEspContainer()
-    if not espContainer or not espContainer.Parent then
-        espContainer = Instance.new("Folder")
-        espContainer.Name = "TLab_EggESP"
-        pcall(function() espContainer.Parent = workspace.Terrain end)
-        if not espContainer.Parent then
-            pcall(function() espContainer.Parent = workspace end)
-        end
-    end
-    return espContainer
-end
-
-local function clearAllEggESP()
-    for uid, node in pairs(activeEspNodes) do
-        pcall(function()
-            if node.part then node.part:Destroy() end
-        end)
-    end
-    table.clear(activeEspNodes)
-    if espContainer then
-        pcall(function() espContainer:ClearAllChildren() end)
-    end
-end
-
-local function updateEggESP()
-    if not State.espEnabled then
-        if next(activeEspNodes) then clearAllEggESP() end
-        return
-    end
-
-    local ok, s = pcall(EggStateModule.ReadFieldEggs)
-    if not ok or type(s) ~= "table" or type(s.Records) ~= "table" then
-        return
-    end
-
-    local h = getRootAndHumanoid()
-    local myPos = h and h.Position or Vector3.zero
-    local container = getEspContainer()
-    local visitedUids = {}
-    local minRank = RarityRankMap[State.espMinRarity] or 0
-
-    for _, r in ipairs(s.Records) do
-        if (r.State == "Slot" or r.State == "Dropped") and typeof(r.BoundsCFrame) == "CFrame" then
-            local a = AssetDirectory[r.AssetCategory]
-            local rarityName = a and a.Rarity and tostring(a.Rarity._id) or "Common"
-            local rank = tonumber(a and a.Rarity and a.Rarity.Rank) or 1
-
-            if rank >= minRank then
-                visitedUids[r.Uid] = true
-                local eggPos = r.BoundsCFrame.Position
-                local dist = math.floor((eggPos - myPos).Magnitude)
-                local color = RarityColors[rarityName] or Color3.fromRGB(255, 255, 255)
-
-                local valText = ""
-                if State.espShowValue then
-                    local val = tonumber(a and a.EarningRate) or 0
-                    if AssetEarningsModule and type(AssetEarningsModule.MutationOnlyRatePerSecond) == "function" then
-                        local okRate, calcRate = pcall(AssetEarningsModule.MutationOnlyRatePerSecond, {Category = r.AssetCategory, Scale = r.AssetScale, Mutations = r.Mutations or {}})
-                        if okRate and type(calcRate) == "number" and calcRate > 0 then
-                            val = calcRate
-                        end
-                    end
-                    if val > 0 then
-                        valText = ` | ${formatCompactValue(val)}/s`
-                    end
-                end
-
-                local distText = State.espShowDist and `\n[{dist}m]` or ""
-                local labelContent = `[{rarityName}] {tostring(r.AssetCategory)}{valText}{distText}`
-
-                local node = activeEspNodes[r.Uid]
-                if not node or not node.part or not node.part.Parent then
-                    local p = Instance.new("Part")
-                    p.Name = `ESP_{r.Uid}`
-                    p.Size = Vector3.new(0.5, 0.5, 0.5)
-                    p.Transparency = 1
-                    p.Anchored = true
-                    p.CanCollide = false
-                    p.CanTouch = false
-                    p.CanQuery = false
-                    p.CFrame = r.BoundsCFrame
-                    p.Parent = container
-
-                    local bb = Instance.new("BillboardGui")
-                    bb.Name = "ESP_Billboard"
-                    bb.Size = UDim2.new(0, 180, 0, 45)
-                    bb.StudsOffset = Vector3.new(0, 3, 0)
-                    bb.AlwaysOnTop = true
-                    bb.MaxDistance = 5000
-                    bb.Adornee = p
-                    bb.Parent = p
-
-                    local lbl = Instance.new("TextLabel")
-                    lbl.Name = "Label"
-                    lbl.Size = UDim2.new(1, 0, 1, 0)
-                    lbl.BackgroundTransparency = 1
-                    lbl.Font = Enum.Font.GothamBold
-                    lbl.TextSize = 13
-                    lbl.TextColor3 = color
-                    lbl.TextStrokeTransparency = 0.2
-                    lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                    lbl.Text = labelContent
-                    lbl.Parent = bb
-
-                    local chams = nil
-                    if State.espChams then
-                        chams = Instance.new("BoxHandleAdornment")
-                        chams.Name = "ESP_Chams"
-                        chams.Size = Vector3.new(3, 3.5, 3)
-                        chams.Color3 = color
-                        chams.Transparency = 0.6
-                        chams.AlwaysOnTop = true
-                        chams.ZIndex = 5
-                        chams.Adornee = p
-                        chams.Parent = p
-                    end
-
-                    activeEspNodes[r.Uid] = {
-                        part = p,
-                        bb = bb,
-                        lbl = lbl,
-                        chams = chams
-                    }
-                else
-                    node.part.CFrame = r.BoundsCFrame
-                    node.lbl.Text = labelContent
-                    node.lbl.TextColor3 = color
-                    if State.espChams and not node.chams then
-                        local chams = Instance.new("BoxHandleAdornment")
-                        chams.Name = "ESP_Chams"
-                        chams.Size = Vector3.new(3, 3.5, 3)
-                        chams.Color3 = color
-                        chams.Transparency = 0.6
-                        chams.AlwaysOnTop = true
-                        chams.ZIndex = 5
-                        chams.Adornee = node.part
-                        chams.Parent = node.part
-                        node.chams = chams
-                    elseif not State.espChams and node.chams then
-                        pcall(node.chams.Destroy, node.chams)
-                        node.chams = nil
-                    end
-                end
-            end
-        end
-    end
-
-    for uid, node in pairs(activeEspNodes) do
-        if not visitedUids[uid] then
-            pcall(function() node.part:Destroy() end)
-            activeEspNodes[uid] = nil
-        end
-    end
-end
-
-local espRunning = false
-local function syncEspLoop()
-    if State.espEnabled and not espRunning then
-        espRunning = true
-        task.spawn(function()
-            while State.espEnabled and globalEnv.__SaeAf == State do
-                pcall(updateEggESP)
-                task.wait(0.25)
-            end
-            espRunning = false
-            clearAllEggESP()
-        end)
-    elseif not State.espEnabled then
-        clearAllEggESP()
-    end
-end
-
-local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
-
-UserInputService.JumpRequest:Connect(function()
-    if State.infJump then
-        local _, hu = getRootAndHumanoid()
-        if hu then
-            hu:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-end)
-
-RunService.Stepped:Connect(function()
-    if State.noclip then
-        local c = LocalPlayer.Character
-        if c then
-            for _, p in ipairs(c:GetDescendants()) do
-                if p:IsA("BasePart") and p.CanCollide then
-                    p.CanCollide = false
-                end
-            end
-        end
-    end
-end)
-
-RunService.Heartbeat:Connect(function()
-    if State.speedBoost then
-        local _, hu = getRootAndHumanoid()
-        if hu and hu.WalkSpeed ~= State.customSpeed then
-            hu.WalkSpeed = State.customSpeed
-        end
-    end
-end)
-
-LocalPlayer.Idled:Connect(function()
-    if State.antiAfk then
-        pcall(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
-    end
-end)
-
-local function isStaffMember(player)
-    if not player or player == LocalPlayer then return false end
-    if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
-        return true
-    end
-    if game.CreatorType == Enum.CreatorType.Group and game.CreatorId > 0 then
-        local ok, r = pcall(player.GetRankInGroup, player, game.CreatorId)
-        if ok and type(r) == "number" and r >= 254 then
-            return true
-        end
-    end
-    return false
-end
-
-local function onPlayerInspected(player)
-    if not State.staffDetector then return end
-    if isStaffMember(player) then
-        writeLog(`[Security] STAFF DETECTED: {player.Name} ({player.UserId})`, true)
-        if Window and Window.Notify then
-            Window:Notify({
-                Title = "Staff Alert!",
-                Content = `Staff detected: {player.Name}! Action: {State.staffAction}`,
-                Type = "Error",
-                Duration = 6
-            })
-        end
-        if State.staffAction == "Server Hop" then
-            task.spawn(hopServer, false)
-        else
-            State.on = false
-            pcall(State.Stop, true)
-            updateStatusLog("Stopped: Staff Joined")
-        end
-    end
-end
-
-Players.PlayerAdded:Connect(function(p)
-    if State.staffDetector then
-        onPlayerInspected(p)
-    end
-end)
-
-pcall(function()
-    local GuiService = game:GetService("GuiService")
-    local TeleportService = game:GetService("TeleportService")
-    GuiService.ErrorMessageChanged:Connect(function()
-        if State.autoRejoin then
-            writeLog("[Auto Rejoin] Disconnect dialog detected! Reconnecting in 3s...", true)
-            task.wait(3)
-            pcall(function()
-                TeleportService:Teleport(game.PlaceId, LocalPlayer)
-            end)
-        end
-    end)
-end)
-
 -- [9] FPS Booster, Server Hop & Hub UI Initialization
 -- ============================================================================
 local function enableFpsBooster()
@@ -3463,107 +3092,6 @@ local HomeTab = Window:CreateHomeTab({
     Title = "Home",
     DiscordInvite = "https://discord.gg/tlab"
 })
-
--- Cyberpunk Showcase Banner Card
-do
-    local Banner = Instance.new("Frame")
-    Banner.Name = "TLab_StealAnEgg_Banner"
-    Banner.Size = UDim2.new(1, 0, 0, 72)
-    Banner.BackgroundColor3 = Color3.fromRGB(12, 16, 24)
-    Banner.BorderSizePixel = 0
-    Banner.Parent = HomeTab.Page
-
-    local bCorner = Instance.new("UICorner")
-    bCorner.CornerRadius = UDim.new(0, 6)
-    bCorner.Parent = Banner
-
-    local bStroke = Instance.new("UIStroke")
-    bStroke.Color = Color3.fromRGB(0, 230, 255)
-    bStroke.Transparency = 0.5
-    bStroke.Thickness = 0.8
-    bStroke.Parent = Banner
-
-    local bGrad = Instance.new("UIGradient")
-    bGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 25, 45)),
-        ColorSequenceKeypoint.new(0.6, Color3.fromRGB(15, 20, 32)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 14, 22))
-    })
-    bGrad.Rotation = 25
-    bGrad.Parent = Banner
-
-    local ThumbFrame = Instance.new("Frame")
-    ThumbFrame.Size = UDim2.new(0, 48, 0, 48)
-    ThumbFrame.Position = UDim2.new(0, 12, 0.5, -24)
-    ThumbFrame.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
-    ThumbFrame.BorderSizePixel = 0
-    ThumbFrame.Parent = Banner
-
-    local tfCorner = Instance.new("UICorner")
-    tfCorner.CornerRadius = UDim.new(0, 6)
-    tfCorner.Parent = ThumbFrame
-
-    local tfStroke = Instance.new("UIStroke")
-    tfStroke.Color = Color3.fromRGB(0, 230, 255)
-    tfStroke.Thickness = 0.8
-    tfStroke.Parent = ThumbFrame
-
-    local ThumbImg = Instance.new("ImageLabel")
-    ThumbImg.Size = UDim2.new(1, -4, 1, -4)
-    ThumbImg.Position = UDim2.new(0, 2, 0, 2)
-    ThumbImg.BackgroundTransparency = 1
-    ThumbImg.Image = "rbxthumb://type=GameIcon&id=" .. (game.GameId > 0 and game.GameId or game.PlaceId) .. "&w=150&h=150"
-    ThumbImg.Parent = ThumbFrame
-
-    local tCorner = Instance.new("UICorner")
-    tCorner.CornerRadius = UDim.new(0, 4)
-    tCorner.Parent = ThumbImg
-
-    local TitleLbl = Instance.new("TextLabel")
-    TitleLbl.Size = UDim2.new(1, -75, 0, 18)
-    TitleLbl.Position = UDim2.new(0, 70, 0, 10)
-    TitleLbl.BackgroundTransparency = 1
-    TitleLbl.Font = Enum.Font.GothamBold
-    TitleLbl.Text = "STEAL AN EGG | CYBER EDITION"
-    TitleLbl.TextColor3 = Color3.fromRGB(0, 255, 235)
-    TitleLbl.TextSize = 13
-    TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLbl.Parent = Banner
-
-    local SubLbl = Instance.new("TextLabel")
-    SubLbl.Size = UDim2.new(1, -75, 0, 14)
-    SubLbl.Position = UDim2.new(0, 70, 0, 30)
-    SubLbl.BackgroundTransparency = 1
-    SubLbl.Font = Enum.Font.GothamMedium
-    SubLbl.Text = "Clone Bypass Active ◈ 3D ESP Ready ◈ Instant Snap Drop"
-    SubLbl.TextColor3 = Color3.fromRGB(150, 175, 205)
-    SubLbl.TextSize = 10
-    SubLbl.TextXAlignment = Enum.TextXAlignment.Left
-    SubLbl.Parent = Banner
-
-    local StatLbl = Instance.new("TextLabel")
-    StatLbl.Size = UDim2.new(1, -75, 0, 14)
-    StatLbl.Position = UDim2.new(0, 70, 0, 47)
-    StatLbl.BackgroundTransparency = 1
-    StatLbl.Font = Enum.Font.Gotham
-    StatLbl.Text = "Eggs Stolen: 0 ◈ Farm Status: Idle"
-    StatLbl.TextColor3 = Color3.fromRGB(166, 255, 111)
-    StatLbl.TextSize = 9
-    StatLbl.TextXAlignment = Enum.TextXAlignment.Left
-    StatLbl.Parent = Banner
-
-    task.spawn(function()
-        while globalEnv.__SaeAf == State do
-            pcall(function()
-                if StatLbl and StatLbl.Parent then
-                    local st = State.on and "FARMING" or (State.bx and "PAUSED" or "IDLE")
-                    StatLbl.Text = string.format("Eggs Stolen: %d ◈ Farm: %s ◈ Speed: %d", State.n, st, State.speedBoost and State.customSpeed or 16)
-                end
-            end)
-            task.wait(1)
-        end
-    end)
-end
 
 do
     local originalNotify = Window.Notify
@@ -3764,15 +3292,15 @@ local function wrapTab(tab)
                             if k:lower() == clean then asset = v break end
                         end
                     end
-                    if asset and topBtn then
-                        lbl.Position = UDim2.new(0, 36, lbl.Position.Y.Scale, lbl.Position.Y.Offset)
+                    if asset then
+                        lbl.Position = UDim2.new(0, 36, 0.5, -9)
                         local badge = Instance.new("Frame")
                         badge.Name = "IconBadge"
-                        badge.Size = UDim2.new(0, 22, 0, 22)
-                        badge.Position = UDim2.new(0, 8, 0.5, -11)
+                        badge.Size = UDim2.new(0, 20, 0, 20)
+                        badge.Position = UDim2.new(0, 8, 0.5, -10)
                         badge.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
                         badge.BorderSizePixel = 0
-                        badge.Parent = topBtn
+                        badge.Parent = topBtn or frame
                         local cr = Instance.new("UICorner")
                         cr.CornerRadius = UDim.new(0, 4)
                         cr.Parent = badge
@@ -3781,7 +3309,7 @@ local function wrapTab(tab)
                         st.Thickness = 0.8
                         st.Parent = badge
                         local img = Instance.new("ImageLabel")
-                        img.Size = UDim2.new(0, 14, 0, 14)
+                        img.Size = UDim2.new(0, 12, 0, 12)
                         img.AnchorPoint = Vector2.new(0.5, 0.5)
                         img.Position = UDim2.new(0.5, 0, 0.5, 0)
                         img.BackgroundTransparency = 1
@@ -3825,13 +3353,11 @@ W.Tab = function(self, opts)
     local name = type(opts) == "table" and (opts.Name or opts.Title or opts[1]) or tostring(opts)
     local icon = type(opts) == "table" and (opts.Icon or opts[2]) or "Gamepad"
     local iconMap = {
-        ["egg"] = "Gamepad",
-        ["calendar-star"] = "Flame",
+        ["egg"] = "Egg",
+        ["calendar-star"] = "Calendar",
         ["four-squares-grid"] = "Sliders",
         ["person-teleport"] = "Compass",
         ["gear"] = "Settings",
-        ["eye"] = "Eye",
-        ["shield"] = "Shield",
     }
     icon = iconMap[icon] or icon
     local rawTab = Window:CreateTab({ Title = name, Icon = icon })
@@ -3845,36 +3371,14 @@ local function getSortedRarityList()
         local r = type(a) == "table" and a.Rarity
         if type(r) == "table" and type(r._id) == "string" and not m[r._id] then
             m[r._id] = true
-            o[#o + 1] = r
+            o[#o + 1] = {n = r._id, k = tonumber(r.Rank) or 0}
         end
     end
-    table.sort(o, function(x, y) return (tonumber(x.Rank) or 0) < (tonumber(y.Rank) or 0) end)
-    local n = {}
-    for _, r in o do n[#n + 1] = r._id end
-    return n
+    table.sort(o, function(x, y) return x.k < y.k end)
+    local l = {}
+    for _, v in ipairs(o) do l[#l + 1] = v.n end
+    return l
 end
-
-local function rs2(v)
-    local t = {}
-    for _, x in v or {} do t[x] = true end
-    return t
-end
-
-local function an()
-    local w = workspace:FindFirstChild("World") or workspace:FindFirstChild("__OBJECTS")
-    local a = w and w:FindFirstChild("Areas")
-    local g = a and a:FindFirstChild("GuardAreas")
-    local o = {}
-    for _, z in g and g:GetChildren() or {} do
-        local b = z:FindFirstChild("Bounds")
-        if b and b:IsA("BasePart") then o[#o + 1] = {z.Name, b.Position.X - b.Size.X / 2} end
-    end
-    table.sort(o, function(x, y) return x[2] < y[2] end)
-    local n = {}
-    for _, v in o do n[#n + 1] = v[1] end
-    return n
-end
-
 local ra = getSortedRarityList()
 pg:Section({Name = "Farm"})
 local xe, xa
@@ -3885,52 +3389,27 @@ xa = pg:Dropdown({
     Multi = true,
     Default = {},
     Flag = "ar",
-    Callback = function(v) State.az = rs2(v) if #v > 0 and xe then xe:Set({}) end end
+    Callback = function(v)
+        State.az = rs2(v)
+        if #v > 0 and xe then xe:Set({}) end
+    end
 })
-
 xe = pg:Dropdown({
     Name = "Select Egg",
-    Icon = "Box",
+    Icon = "Sparkles",
     Options = ra,
     Multi = true,
     Default = {},
     Flag = "mr",
-    Callback = function(v) State.mr = rs2(v) if #v > 0 and xa then xa:Set({}) end end
+    Callback = function(v)
+        State.mr = rs2(v)
+        if #v > 0 and xa then xa:Set({}) end
+    end
 })
-
-pg:Toggle({
-    Name = "Prioritize Highest Value ($/s)",
-    Icon = "DollarSign",
-    Description = "Smart target eggs with highest mutated $/s rate",
-    Default = true,
-    Flag = "phv",
-    Callback = function(v) State.smartPrioritize = (v == true) end
-})
-
-pg:Slider({
-    Name = "Min Egg Value ($/s)",
-    Icon = "Coins",
-    Flag = "mev",
-    Min = 0,
-    Max = 100000,
-    Step = 500,
-    Default = 0,
-    Callback = function(v) State.minEggValue = v end
-})
-
-pg:Toggle({
-    Name = "Fast Base Deposit",
-    Icon = "Zap",
-    Description = "Instantly snap & deposit egg upon reaching base zone",
-    Default = true,
-    Flag = "fbd",
-    Callback = function(v) State.fastDeposit = (v == true) end
-})
-
 State.ui.ae = pg:Toggle({
     Name = "Auto Steal Egg",
     Icon = "Target",
-    Description = "Hop-fly steal loop using cloned humanoid bypass",
+    Description = "Auto fly & steal highest rarity eggs from field",
     Default = false,
     Flag = "ae",
     Callback = function(v)
@@ -3939,7 +3418,6 @@ State.ui.ae = pg:Toggle({
         if v then State.Start() else State.Stop() end
     end
 })
-
 local xp = pg:Toggle({
     Name = "Auto Place Egg",
     Icon = "Package",
@@ -3949,7 +3427,6 @@ local xp = pg:Toggle({
     Callback = function(v) State.ap = v == true end
 })
 State.ap = xp.v == true
-
 local xh = pg:Toggle({
     Name = "Auto Hatch Egg",
     Icon = "Sparkles",
@@ -3959,117 +3436,61 @@ local xh = pg:Toggle({
     Callback = function(v) State.ah = v == true end
 })
 State.ah = xh.v == true
-
 pg:Toggle({
     Name = "Pet Index",
-    Icon = "Trophy",
-    Description = "Prioritize stealing unowned eggs for index completion",
+    Icon = "Bookmark",
+    Description = "Prioritize uncollected eggs for index unlock",
     Default = false,
     Flag = "pix",
     Callback = function(v) State.pi = v == true end
 })
-
 pg:Button({
     Name = "Leave Treadmill",
-    Icon = "Power",
-    Description = "Doff and disconnect character from active treadmill",
+    Icon = "LogOut",
+    Description = "Instantly exit treadmill machine",
     Callback = function()
-        local ok, wy = false, "Treadmill Failed: Not Mounted"
-        if State.bt or getActiveTreadmillModel() then ok, wy = leaveTreadmill() end
-        updateStatusLog(ok and "Treadmill Left" or tostring(wy))
-        W:Notify({Title = "Leave Treadmill", Text = ok and "Treadmill Left" or tostring(wy), Error = not ok})
+        local ok, wy = leaveTreadmill()
+        updateStatusLog(ok and "Left Treadmill" or tostring(wy))
+        W:Notify({Title = "Leave Treadmill", Text = ok and "Left Treadmill" or tostring(wy), Error = not ok})
     end
 })
 
 pg:Section({Name = "Pet"})
 pg:Dropdown({
     Name = "Sell Pet Rarity",
-    Icon = "Filter",
+    Icon = "Coins",
     Options = ra,
     Multi = true,
     Default = {},
     Flag = "spr",
-    Callback = function(v) State.sp = rs2(v) end
+    Callback = function(v) State.ps = rs2(v) end
 })
-
 pg:Toggle({
     Name = "Auto Sell Pet",
-    Icon = "Trash2",
-    Description = "Auto sell hatched pets matching chosen rarities",
+    Icon = "Flame",
+    Description = "Auto sell hatched pets matching selected rarities",
     Default = false,
     Flag = "asp",
-    Callback = function(v) State.ps = v end
+    Callback = function(v) State.sp = v == true end
 })
 
 pg:Section({Name = "Egg"})
 pg:Dropdown({
     Name = "Sell Egg Rarity",
-    Icon = "Filter",
+    Icon = "Coins",
     Options = ra,
     Multi = true,
     Default = {},
     Flag = "ser",
-    Callback = function(v) State.se = rs2(v) end
+    Callback = function(v) State.es = rs2(v) end
 })
-
 pg:Toggle({
     Name = "Auto Sell Egg",
-    Icon = "Trash",
-    Description = "Auto sell inventory eggs matching chosen rarities",
+    Icon = "Flame",
+    Description = "Auto sell unhatched inventory eggs matching rarities",
     Default = false,
     Flag = "ase",
-    Callback = function(v) State.es = v end
-})
-
-local vs = W:Tab({Name = "Visuals", Icon = "eye"})
-vs:Section({Name = "Egg ESP"})
-
-vs:Toggle({
-    Name = "Egg ESP",
-    Icon = "Eye",
-    Description = "3D billboard tracker with rarity color codes",
-    Default = false,
-    Flag = "eesp",
-    Callback = function(v)
-        State.espEnabled = (v == true)
-        syncEspLoop()
-    end
-})
-
-vs:Toggle({
-    Name = "Show Value ($/s)",
-    Icon = "DollarSign",
-    Description = "Display real-time mutated revenue on ESP billboards",
-    Default = true,
-    Flag = "esv",
-    Callback = function(v) State.espShowValue = (v == true) end
-})
-
-vs:Toggle({
-    Name = "Show Distance",
-    Icon = "Compass",
-    Description = "Display distance in meters to target field eggs",
-    Default = true,
-    Flag = "esd",
-    Callback = function(v) State.espShowDist = (v == true) end
-})
-
-vs:Toggle({
-    Name = "Egg Highlight (Chams)",
-    Icon = "Sparkles",
-    Description = "Glow box chams outline around egg models",
-    Default = false,
-    Flag = "echm",
-    Callback = function(v) State.espChams = (v == true) end
-})
-
-vs:Dropdown({
-    Name = "Min ESP Rarity",
-    Icon = "Filter",
-    Options = {"All", "Uncommon+", "Rare+", "Epic+", "Legendary+", "Mythic+", "Secret+", "Titan"},
-    Default = "All",
-    Flag = "mer",
-    Callback = function(v) State.espMinRarity = v end
+    Callback = function(v) State.se = v == true end
 })
 
 local et = W:Tab({Name = "Event", Icon = "calendar-star"})
@@ -4078,10 +3499,16 @@ local xb = et:Label({Text = bc()})
 task.spawn(function()
     while globalEnv.__SaeAf == State do
         pcall(function() xb:Set(bc()) end)
+        task.wait(0.5)
+    end
+end)
+local xs = et:Label({Text = bb()})
+task.spawn(function()
+    while globalEnv.__SaeAf == State do
+        pcall(function() xs:Set(bb()) end)
         task.wait(1)
     end
 end)
-
 State.ui.abf = et:Toggle({
     Name = "Auto Butterfly",
     Icon = "Flame",
@@ -4096,11 +3523,10 @@ State.ui.abf = et:Toggle({
         if State.bf then task.spawn(startAutoButterflyThread, State.bi) end
     end
 })
-
 et:Button({
     Name = "Teleport To Station",
-    Icon = "MapPin",
-    Description = "Warp character to Butterfly Bloom quest hub",
+    Icon = "Compass",
+    Description = "Teleport character to Butterfly Event zone",
     Callback = function()
         local ok, wy = bu()
         updateStatusLog(ok and "At Station" or tostring(wy))
@@ -4110,14 +3536,9 @@ et:Button({
 
 et:Section({Name = "Halloween"})
 local function hq()
-    if not (State.hd or State.hm or State.hx) then return end
-    if not isKeyValid() then
-        updateStatusLog("Key Check Failed: No Valid Key")
+    if not (State.hd or State.hm or State.hx) then
+        State.hg += 1
         return
-    end
-    for _, k in {"ae", "abf", "arl", "atx"} do
-        local x = rawget(State.ui, k)
-        if x and x.v then x:Set(false) end
     end
     if State.hl then return end
     State.hg += 1
@@ -4126,7 +3547,7 @@ end
 local function hz3(v)
     local x = rawget(State.ui, "ae")
     if v and x and x.v then x:Set(false) end
-    State.hd = v == true
+    State.hd, State.hm, State.hx = v == true, v == true, v == true
     hq()
 end
 State.ui.ahd = et:Toggle({
@@ -4141,27 +3562,26 @@ State.ui.ahd = et:Toggle({
 et:Section({Name = "Admin"})
 State.ui.arl = et:Toggle({
     Name = "Auto Red Light Green Light",
-    Icon = "Play",
-    Description = "Auto win Squid Game minigame event",
+    Icon = "Activity",
+    Description = "Auto complete Squid Game style minigame safely",
     Default = false,
     Flag = "arl",
     Callback = function(v)
-        State.lx = (v == true)
+        State.lx = v == true
         if State.lx then
             State.gg += 1
             task.spawn(startAutoMinigameThread, State.gg, RedLightConfig)
         end
     end
 })
-
 State.ui.atx = et:Toggle({
     Name = "Auto T-Rex Run",
-    Icon = "Activity",
-    Description = "Auto dodge boulders & survive T-Rex stampede",
+    Icon = "Footprints",
+    Description = "Auto run & dodge obstacles in T-Rex temple run",
     Default = false,
     Flag = "atx",
     Callback = function(v)
-        State.tx = (v == true)
+        State.tx = v == true
         if State.tx then
             State.gg += 1
             task.spawn(startAutoMinigameThread, State.gg, TRexConfig)
@@ -4179,7 +3599,6 @@ mi:Toggle({
     Flag = "ast",
     Callback = function(v) toggleAntiStun(v == true) end
 })
-
 local antiTrapToggle = mi:Toggle({
     Name = "Anti Trap",
     Icon = "Shield",
@@ -4189,90 +3608,12 @@ local antiTrapToggle = mi:Toggle({
     Callback = function(v) toggleAntiTrap(v == true) end
 })
 
-mi:Section({Name = "Player Movement"})
-mi:Toggle({
-    Name = "Speed Boost",
-    Icon = "Zap",
-    Description = "Custom WalkSpeed boost via cloned humanoid",
-    Default = false,
-    Flag = "sbd",
-    Callback = function(v) State.speedBoost = (v == true) end
-})
-
-mi:Slider({
-    Name = "Speed Value",
-    Icon = "Gauge",
-    Flag = "spv",
-    Min = 16,
-    Max = 80,
-    Step = 2,
-    Default = 24,
-    Callback = function(v) State.customSpeed = v end
-})
-
-mi:Toggle({
-    Name = "Infinite Jump",
-    Icon = "ChevronUp",
-    Description = "Allows jumping continuously in mid-air",
-    Default = false,
-    Flag = "ijp",
-    Callback = function(v) State.infJump = (v == true) end
-})
-
-mi:Toggle({
-    Name = "Noclip",
-    Icon = "Unlock",
-    Description = "Phases through enemy base walls, doors & lasers",
-    Default = false,
-    Flag = "ncl",
-    Callback = function(v) State.noclip = (v == true) end
-})
-
-mi:Toggle({
-    Name = "Anti AFK",
-    Icon = "Moon",
-    Description = "Prevents Roblox 20-minute idle disconnect 24/7",
-    Default = false,
-    Flag = "aafk",
-    Callback = function(v) State.antiAfk = (v == true) end
-})
-
-mi:Section({Name = "Security"})
-mi:Toggle({
-    Name = "Staff Detector",
-    Icon = "ShieldAlert",
-    Description = "Detects Admin, Developer or Creator presence",
-    Default = false,
-    Flag = "sdt",
-    Callback = function(v)
-        State.staffDetector = (v == true)
-        if State.staffDetector then
-            for _, p in ipairs(Players:GetPlayers()) do onPlayerInspected(p) end
-        end
-    end
-})
-
-mi:Dropdown({
-    Name = "Staff Action",
-    Icon = "Sliders",
-    Options = {"Stop Farm", "Server Hop"},
-    Default = "Stop Farm",
-    Flag = "sda",
-    Callback = function(v) State.staffAction = v end
-})
-
-mi:Toggle({
-    Name = "Auto Rejoin",
-    Icon = "RefreshCw",
-    Description = "Auto reconnects on server kicks or network errors",
-    Default = false,
-    Flag = "arj",
-    Callback = function(v) State.autoRejoin = (v == true) end
-})
-
 local tp2 = W:Tab({Name = "Teleport", Icon = "person-teleport"})
 tp2:Section({Name = "Server"})
-for _, z in {{"Hop Server", false, "Globe", "Teleport to another random public server"}, {"Hop Low Server", true, "Server", "Teleport to a low-player server for safer farming"}} do
+for _, z in {
+    {"Hop Server", false, "Globe", "Teleport to another random public server"},
+    {"Hop Low Server", true, "Server", "Teleport to a low-player server for safer farming"}
+} do
     tp2:Button({
         Name = z[1],
         Icon = z[3],
@@ -4306,7 +3647,6 @@ tz:Button({
 })
 
 local lgv, lgd = false, {
-    -- Titles
     ["Select Area"] = "Chọn Khu Vực",
     ["Select Egg"] = "Chọn Trứng",
     ["Auto Steal Egg"] = "Tự Động Trộm Trứng",
@@ -4319,89 +3659,78 @@ local lgv, lgd = false, {
     ["Sell Egg Rarity"] = "Độ Hiếm Trứng Cần Bán",
     ["Auto Sell Egg"] = "Tự Động Bán Trứng",
     ["Auto Butterfly"] = "Tự Động Bắt Bướm",
-    ["Teleport To Station"] = "Dịch Chuyển Tới Nhà Ga",
+    ["Teleport To Station"] = "Dịch Chuyển Đến Trạm",
     ["Auto Halloween"] = "Tự Động Halloween",
-    ["Auto Red Light Green Light"] = "Tự Động Đèn Xanh Đèn Đỏ",
+    ["Auto Red Light Green Light"] = "Tự Động Đèn Đỏ Đèn Xanh",
     ["Auto T-Rex Run"] = "Tự Động Chạy T-Rex",
     ["Anti Stun"] = "Chống Choáng",
     ["Anti Trap"] = "Chống Bẫy",
     ["Hop Server"] = "Đổi Server",
     ["Hop Low Server"] = "Đổi Server Ít Người",
-    ["FPS Booster"] = "Tăng FPS",
+    ["FPS Booster"] = "Tăng Tốc Game",
     ["Select Language"] = "Chọn Ngôn Ngữ",
-    ["Steal Hop Distance"] = "Steal: Khoảng Nhảy",
-    ["Steal Drop Wait"] = "Steal: Chờ Drop",
-    ["Steal Drop Every (Zones)"] = "Steal: Drop Mỗi (Khu)",
-    ["Halloween Hop Distance"] = "Halloween: Khoảng Nhảy",
-    ["Halloween Drop Wait"] = "Halloween: Chờ Drop",
-    ["Halloween Drop Every (Studs)"] = "Halloween: Drop Mỗi (Stud)",
     ["Default Setting"] = "Cài Đặt Mặc Định",
-    ["Visuals"] = "Hiển Thị",
-    ["Egg ESP"] = "ESP Trứng",
-    ["Show Value ($/s)"] = "Hiện Giá Trị ($/s)",
-    ["Show Distance"] = "Hiện Khoảng Cách",
-    ["Egg Highlight (Chams)"] = "Viền Phát Sáng (Chams)",
-    ["Min ESP Rarity"] = "Độ Hiếm ESP Tối Thiểu",
-    ["Prioritize Highest Value ($/s)"] = "Ưu Tiên Giá Trị Cao Nhất ($/s)",
-    ["Min Egg Value ($/s)"] = "Giá Trị Trứng Tối Thiểu ($/s)",
-    ["Fast Base Deposit"] = "Giao Trứng Nhanh",
-    ["Player Movement"] = "Di Chuyển Nhân Vật",
-    ["Speed Boost"] = "Tăng Tốc Chạy",
-    ["Speed Value"] = "Tốc Độ Chạy",
-    ["Infinite Jump"] = "Nhảy Vô Hạn",
-    ["Noclip"] = "Đi Xuyên Tường",
-    ["Anti AFK"] = "Chống Treo Máy (AFK)",
-    ["Security"] = "Bảo Mật & An Toàn",
-    ["Staff Detector"] = "Phát Hiện Admin / Staff",
-    ["Staff Action"] = "Hành Động Khi Gặp Staff",
-    ["Auto Rejoin"] = "Tự Kết Nối Lại Khi Mất Mạng",
-
-    -- Descriptions
-    ["Smart target eggs with highest mutated $/s rate"] = "Tự động nhắm trứng có giá trị $/s đột biến cao nhất",
-    ["Instantly snap & deposit egg upon reaching base zone"] = "Giao trứng tức thì ngay khi chạm ranh giới căn cứ",
-    ["Hop-fly steal loop using cloned humanoid bypass"] = "Vòng lặp trộm trứng hop-fly qua bypass cloned humanoid",
-    ["Auto deposit eggs from inventory into open nests"] = "Tự động đặt trứng từ balo vào các tổ trứng trống",
-    ["Auto hatch ready incubated eggs in base nests"] = "Tự động ấp nở các trứng đã đủ thời gian trong tổ",
-    ["Prioritize stealing unowned eggs for index completion"] = "Ưu tiên cướp trứng chưa có để hoàn thành bộ sưu tập",
-    ["Doff and disconnect character from active treadmill"] = "Rời và ngắt kết nối nhân vật khỏi máy chạy bộ",
-    ["Auto sell hatched pets matching chosen rarities"] = "Tự động bán pet đã nở theo độ hiếm đã chọn",
-    ["Auto sell inventory eggs matching chosen rarities"] = "Tự động bán trứng trong túi theo độ hiếm đã chọn",
-    ["3D billboard tracker with rarity color codes"] = "Hiển thị 3D theo dõi trứng kèm màu độ hiếm",
-    ["Display real-time mutated revenue on ESP billboards"] = "Hiện doanh thu $/s đột biến trực tiếp trên ESP",
-    ["Display distance in meters to target field eggs"] = "Hiện khoảng cách theo mét tới các quả trứng",
-    ["Glow box chams outline around egg models"] = "Khung dạ quang xuyên tường bao quanh quả trứng",
-    ["Auto catch butterflies & complete Wisp quests"] = "Tự động bắt bướm và làm nhiệm vụ Wisp",
-    ["Warp character to Butterfly Bloom quest hub"] = "Dịch chuyển tức thời tới trạm nhiệm vụ bướm",
-    ["Farm Halloween candies, souls & ghost train boss"] = "Farm kẹo Halloween, linh hồn và boss tàu ma",
-    ["Auto win Squid Game minigame event"] = "Tự động thắng minigame Đèn Xanh Đèn Đỏ",
-    ["Auto dodge boulders & survive T-Rex stampede"] = "Tự động né đá và vượt qua minigame T-Rex",
-    ["Prevent ragdoll & stun status from heavy hits"] = "Chống choáng và chống ngã ragdoll khi bị tấn công",
-    ["Disable touch traps and bear traps in enemy bases"] = "Vô hiệu hóa bẫy gấu và bẫy dẫm trong base đối thủ",
-    ["Custom WalkSpeed boost via cloned humanoid"] = "Tăng tốc chạy an toàn qua cloned humanoid",
-    ["Allows jumping continuously in mid-air"] = "Cho phép nhảy liên tục nhiều lần trên không",
-    ["Phases through enemy base walls, doors & lasers"] = "Đi xuyên tường, cửa khóa và cổng laser base đối thủ",
-    ["Prevents Roblox 20-minute idle disconnect 24/7"] = "Chống bị ngắt kết nối treo máy 20 phút của Roblox",
-    ["Detects Admin, Developer or Creator presence"] = "Phát hiện khi Admin, Dev hoặc Creator vào server",
-    ["Auto reconnects on server kicks or network errors"] = "Tự động kết nối lại khi bị kick hoặc mất mạng",
-    ["Teleport to another random public server"] = "Chuyển sang một server công khai ngẫu nhiên khác",
+    ["Steal Hop Distance"] = "Khoảng Cách Nhảy Trộm",
+    ["Steal Drop Wait"] = "Thời Gian Chờ Thả Trộm",
+    ["Steal Drop Every (Zones)"] = "Thả Sau Mỗi (Khu Vực)",
+    ["Halloween Hop Distance"] = "Khoảng Cách Nhảy Halloween",
+    ["Halloween Drop Wait"] = "Thời Gian Chờ Thả Halloween",
+    ["Halloween Drop Every (Studs)"] = "Thả Sau Mỗi (Studs)",
+    ["Farm"] = "Nông Trại",
+    ["Pet"] = "Thú Cưng",
+    ["Egg"] = "Trứng",
+    ["Butterfly"] = "Bắt Bướm",
+    ["Halloween"] = "Lễ Hội Ma",
+    ["Admin"] = "Quản Trị",
+    ["Player"] = "Người Chơi",
+    ["Server"] = "Máy Chủ",
+    ["Game"] = "Trò Chơi",
+    ["Setting"] = "Cài Đặt",
+    ["Language"] = "Ngôn Ngữ",
+    ["Auto fly & steal highest rarity eggs from field"] = "Tự động bay trộm trứng hiếm nhất trên sân",
+    ["Auto deposit eggs from inventory into open nests"] = "Tự động gửi trứng từ túi đồ vào tổ ấp",
+    ["Auto hatch ready incubated eggs in base nests"] = "Tự động ấp các quả trứng đã chín trong tổ",
+    ["Prioritize uncollected eggs for index unlock"] = "Ưu tiên nhặt trứng chưa có để mở khóa bộ sưu tập",
+    ["Instantly exit treadmill machine"] = "Thoát máy chạy bộ ngay lập tức",
+    ["Auto sell hatched pets matching selected rarities"] = "Tự động bán pet đã nở theo độ hiếm đã chọn",
+    ["Auto sell unhatched inventory eggs matching rarities"] = "Tự động bán trứng chưa nở trong túi theo độ hiếm",
+    ["Auto catch butterflies & complete Wisp quests"] = "Tự động bắt bướm và hoàn thành nhiệm vụ Wisp",
+    ["Teleport character to Butterfly Event zone"] = "Dịch chuyển nhân vật đến khu sự kiện bướm",
+    ["Farm Halloween candies, souls & ghost train boss"] = "Tự động nhặt kẹo, linh hồn và đánh boss tàu ma",
+    ["Auto complete Squid Game style minigame safely"] = "Tự động vượt qua minigame đèn xanh đèn đỏ an toàn",
+    ["Auto run & dodge obstacles in T-Rex temple run"] = "Tự động chạy và né chướng ngại vật trong đền T-Rex",
+    ["Prevent ragdoll & stun status from heavy hits"] = "Ngăn chặn trạng thái choáng và ngã ngửa khi bị đánh",
+    ["Disable touch traps and bear traps in enemy bases"] = "Vô hiệu hóa bẫy chạm và bẫy gấu trong căn cứ địch",
+    ["Teleport to another random public server"] = "Chuyển sang một máy chủ công khai ngẫu nhiên khác",
     ["Teleport to a low-player server for safer farming"] = "Chuyển sang server ít người để farm an toàn hơn",
-    ["Optimize 3D rendering, remove particles & boost FPS"] = "Tối ưu hóa render 3D, xóa hạt hiệu ứng để tăng FPS",
-    ["Reset all timing and distance sliders to default"] = "Khôi phục toàn bộ thanh trượt về cài đặt mặc định",
+    ["Optimize 3D rendering, remove particles & boost FPS"] = "Tối ưu hóa hình ảnh 3D, xóa hạt hiệu ứng để tăng FPS",
 }
 
 local function applyLanguageTranslations()
     for _, item in ipairs(translatableElements) do
-        if item.label and item.label.Parent then
-            local text = lgv and (lgd[item.en] or item.en) or item.en
-            if item.isSection then
-                pcall(function() item.label.Text = string.upper(text) end)
-            else
-                pcall(function() item.label.Text = text end)
+        pcall(function()
+            if item.label and item.label.Parent then
+                local en = item.en
+                local vi = lgd[en]
+                if lgv and vi then
+                    if item.isSection then
+                        item.label.Text = vi:upper()
+                    else
+                        item.label.Text = vi
+                    end
+                else
+                    if item.isSection then
+                        item.label.Text = en:upper()
+                    else
+                        item.label.Text = en
+                    end
+                end
             end
-        end
+        end)
     end
 end
 
+tz:Section({Name = "Language"})
 tz:Dropdown({
     Name = "Select Language",
     Icon = "Globe",
@@ -4416,32 +3745,44 @@ tz:Dropdown({
 
 local sdf = {}
 for _, r in {
-    {"Steal Hop Distance", "shd", 50, 400, 1, "hs"},
-    {"Steal Drop Wait", "sdw", 0, 2, 0.05, "dw"},
-    {"Steal Drop Every (Zones)", "srz", 1, 6, 1, "rz"},
-    {"Halloween Hop Distance", "hhd", 50, 400, 1, "hk"},
-    {"Halloween Drop Wait", "hdw", 0, 2, 0.05, "hw"},
-    {"Halloween Drop Every (Studs)", "hdr", 100, 1500, 1, "hr"},
+    {"Steal Hop Distance", "shd", 50, 400, 1, "hs", "Move"},
+    {"Steal Drop Wait", "sdw", 0, 2, 0.05, "dw", "Clock"},
+    {"Steal Drop Every (Zones)", "srz", 1, 6, 1, "rz", "Layers"},
+    {"Halloween Hop Distance", "hhd", 50, 400, 1, "hk", "Move"},
+    {"Halloween Drop Wait", "hdw", 0, 2, 0.05, "hw", "Clock"},
+    {"Halloween Drop Every (Studs)", "hdr", 100, 1500, 1, "hr", "Layers"},
 } do
     local k, d0 = r[6], State[r[6]]
-    local e = tz:Slider({Name = r[1], Flag = r[2], Min = r[3], Max = r[4], Step = r[5], Default = d0, Callback = function(v) State[k] = v end})
+    local e = tz:Slider({
+        Name = r[1],
+        Icon = r[7],
+        Flag = r[2],
+        Min = r[3],
+        Max = r[4],
+        Step = r[5],
+        Default = d0,
+        Callback = function(v) State[k] = v end
+    })
     State[k], sdf[#sdf + 1] = e.v, {e, d0}
 end
-tz:Button({Name = "Default Setting", Callback = function()
-    for _, x in sdf do x[1]:Set(x[2]) end
-    W:Notify({Title = "Default Setting", Text = "Back To Default"})
-end})
+tz:Button({
+    Name = "Default Setting",
+    Icon = "RotateCcw",
+    Description = "Reset all slider values back to default",
+    Callback = function()
+        for _, x in sdf do x[1]:Set(x[2]) end
+        W:Notify({Title = "Default Setting", Text = "Back To Default"})
+    end
+})
 applyLanguageTranslations()
 State.gr = true
 
 task.spawn(function()
-    local qa = AssetEarningsModule
-    local qf = FormatNumberUtil
-    if not qa or not qf then
-        local o1, m1 = pcall(require, ReplicatedStorage.Shared.Util.AssetEarnings)
-        local o2, m2 = pcall(require, ReplicatedStorage.Packages.FormatNumber.Simple)
-        qa = o1 and m1 or qa
-        qf = o2 and m2 or qf
+    local o1, qa = pcall(require, ReplicatedStorage.Shared.Util.AssetEarnings)
+    local o2, qf = pcall(require, ReplicatedStorage.Packages.FormatNumber.Simple)
+    if not (o1 and o2) then
+        writeLog("[Egg Value] Load Failed: Missing Module")
+        return
     end
     local qv = {}
     while globalEnv.__SaeAf == State do
