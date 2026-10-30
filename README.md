@@ -197,43 +197,7 @@ local State = {
     gbd = 20,               -- Guard Boundary Distance Threshold
     cs = nil,               -- Current Plot State Cache
     rtn = 0,                -- Return Home Retry Counter
-    hs = 264,               -- Teleport Hop Step Distance
-    instantSteal = false,   -- Instant Steal V3 Mode (Chilli-style direct hop bypass)
-    minStealValue = 0,      -- Minimum Egg Value Earning Rate Threshold
-    hitAura = false,        -- Auto Bat Hit Aura
-    hitAuraRange = 18,      -- Bat Swing Range (Studs)
-    antiAfk = true,         -- Anti 20-min AFK Kick
-    autoRejoin = true,      -- Auto Reconnect on Disconnect
-
-    -- Butterfly Event Enhancements (Chilli V7)
-    bprio = "Rarest",          -- Catch Priority ("Rarest", "Closest")
-    bmode = "Chase",           -- Catch Mode ("Chase", "Teleport")
-    bspeed = 600,              -- Catch Tween Speed (studs/s)
-    btup = false,              -- Auto Trade Up Butterflies
-    bess = false,              -- Auto Craft Essence
-    bwisp = false,             -- Auto Wisp Quest
-    bcrick = false,            -- Auto Banjo Cricket
-
-    -- Halloween & Monsters Enhancements (Chilli V7)
-    hinst = false,             -- Instant Steal Halloween Eggs (Fast bypass hop)
-    hmin = 0,                  -- Min Halloween Egg Value /s Threshold
-    hbuy = false,              -- Auto Buy Halloween Egg (2,250 Tokens)
-    hbm = false,               -- Only Farm Monsters During Blood Moon
-    pboss = false,             -- Auto Pumpkin Boss
-    pdodge = true,             -- Auto Dodge Pumpkin Boss Attacks
-    pmoon = false,             -- Auto Pumpkin Moon
-
-    -- Phantom Express Enhancements (Chilli V7)
-    pms = true,                -- Train Candy Suction / Vacuum Ghouler Boss
-    pts = true,                -- Auto Trade Souls (1,000 Spectral Souls)
-
-    -- Shooting Star Event (Chilli V7)
-    sstar = false,             -- Auto Catch Shooting Star
-
-    -- Minigames Enhancements (Chilli V7)
-    cegg = false,              -- Auto Capture The Egg
-    ceggHoldHeight = 38,       -- Hold Height (studs)
-    ceggKeepAway = 131         -- Keep Away Distance (studs)
+    hs = 264                -- Teleport Hop Step Distance
 }
 globalEnv.__SaeAf = State
 
@@ -355,9 +319,6 @@ local function getCandidateFieldEggs()
                 matchRarity = a and a.Rarity and State.mr[a.Rarity._id] == true
             end
             wt = matchArea and matchRarity
-            if wt and State.minStealValue and State.minStealValue > 0 and (tonumber(a.EarningRate) or 0) < State.minStealValue then
-                wt = false
-            end
         end
         if a and (r.State == "Slot" or r.State == "Dropped") and typeof(r.BoundsCFrame) == "CFrame" and (State.bl[r.Uid] or 0) < t and wt then
             o[#o + 1] = {u = r.Uid, r = r, k = tonumber(a.Rarity and a.Rarity.Rank) or 0, e = tonumber(a.EarningRate) or 0, p = r.BoundsCFrame.Position}
@@ -649,12 +610,6 @@ local function flyToEgg(e)
         if not dd or dd < 2 then return "Fly Failed: Night Coming" end
         return nil
     end
-    if State.instantSteal then
-        -- Chilli-Style Instant Steal: direct hop to corridor waypoint and egg target!
-        local ok, wy = hopToPosition(b, nil, false, ck)
-        if not ok then return false, wy end
-        return hopToPosition(e.p + Vector3.new(0, 3, 0), nil, false, ck)
-    end
     local _, hu = getRootAndHumanoid()
     local ok, wy = moveToTarget(b, ck, hu and (b - h.Position).Magnitude / math.max(hu.WalkSpeed * State.fm, 16) + 10 or 30, State.fm, true)
     if not ok then return false, wy end
@@ -702,8 +657,7 @@ end
 
 local function relayDropAndRepickEgg()
     local t0 = os.clock()
-    local dropDelay = State.instantSteal and 0.02 or State.dw
-    task.wait(dropDelay)
+    task.wait(State.dw)
     local o1, cs = pcall(EggStateModule.ReadCarryState)
     local u = o1 and type(cs) == "table" and cs.Uid
     if type(u) ~= "string" then return false, "Drop Failed: No Carry Uid" end
@@ -805,15 +759,6 @@ local function returnHomeWithEgg(rq)
     if not rq then
         task.wait(0.1)
         return moveToTarget(en - lv * 70, nil, 5)
-    end
-    if State.instantSteal then
-        -- Chilli-Style Instant Steal: direct long hop to safe zone & instantaneous delivery
-        ok, wy = relayDropAndRepickEgg()
-        if not ok then return false, wy end
-        return moveToTarget(en - lv * 70, function()
-            if not isCarryingEgg() then return "Delivered" end
-            return nil
-        end, 4, 3, false)
     end
     ok, wy = relayDropAndRepickEgg()
     if not ok then return false, wy end
@@ -2253,14 +2198,8 @@ local function autoButterflyLoopBody(generationId)
             local eo = typeof(e.Position) == "Vector3" and b.CFrame:PointToObjectSpace(e.Position)
             if (e.Alpha or 0) >= 0.5 and eo and math.abs(eo.X) <= b.Size.X / 2 + 10 and math.abs(eo.Z) <= b.Size.Z / 2 + 10 and type(e.Flight) == "table" then
                 local m, k = (e.Position - h.Position).Magnitude, tonumber(type(e.Tier) == "table" and e.Tier.Order) or 0
-                local shouldPick = false
-                if State.bprio == "Closest" then
-                    shouldPick = (m < pd or (m == pd and k > pk))
-                else
-                    shouldPick = (k > pk or (k == pk and m < pd))
-                end
                 if not nd or (type(e.Tier) == "table" and nd[e.Tier.Id] ~= nil) then
-                    if shouldPick then p, pk, pd = e, k, m end
+                    if k > pk or (k == pk and m < pd) then p, pk, pd = e, k, m end
                     if m <= 13 and (k > sk or (k == sk and m < sd)) then s, sk, sd = e, k, m end
                 end
                 if k > xk or (k == xk and m < xd) then x1, xk, xd = e, k, m end
@@ -2269,7 +2208,7 @@ local function autoButterflyLoopBody(generationId)
         end
         p, s = p or x1, s or y1
         if s and os.clock() >= nx then
-            nx = os.clock() + 0.35
+            nx = os.clock() + 0.5
             local id = s.Flight.Id
             task.spawn(function()
                 local ok, r = pcall(function() return RemotesModule.Butterflies.AskSwing:InvokeServer(id) end)
@@ -2279,18 +2218,13 @@ local function autoButterflyLoopBody(generationId)
         if p then
             local q = p.Position
             pcall(function() q = bq.PositionAt(p.Flight, workspace:GetServerTimeNow() + 0.3) end)
-            if State.bmode == "Teleport" then
-                h.CFrame = CFrame.new(Vector3.new(q.X, q.Y, q.Z))
-                h.AssemblyLinearVelocity = Vector3.zero
-            else
-                local v = Vector3.new(h.Position.X - q.X, 0, h.Position.Z - q.Z)
-                q = v.Magnitude > 0.1 and q + v.Unit * 11 or q
-                hu:MoveTo(Vector3.new(q.X, h.Position.Y, q.Z))
-            end
+            local v = Vector3.new(h.Position.X - q.X, 0, h.Position.Z - q.Z)
+            q = v.Magnitude > 0.1 and q + v.Unit * 11 or q
+            hu:MoveTo(Vector3.new(q.X, h.Position.Y, q.Z))
         else
             hu:MoveTo(Vector3.new(b.Position.X, h.Position.Y, b.Position.Z))
         end
-        updateStatusLog(string.format("%s | Caught %d", (State.bprio == "Closest" and "Catching Closest") or (nd and "Catching For Essence" or "Catching Rarest"), tc - c0))
+        updateStatusLog(string.format("%s | Caught %d", nd and "Catching For Essence" or "Catching Rarest", tc - c0))
         task.wait(0.1)
     end
     State.bx = false
@@ -2372,10 +2306,7 @@ local function autoHalloweenLoopBody(generationId)
             local z = ok and zq(q.Position)
             if type(u) == "string" and type(pn) == "string" and p and p:IsA("ProximityPrompt") and p.Enabled and (State.hbl[u] or 0) < t and z then
                 local a = AssetDirectory[pn]
-                local earnRate = tonumber(a and a.EarningRate) or 0
-                if not State.hmin or State.hmin <= 0 or earnRate >= State.hmin then
-                    o[#o + 1] = {u = u, p = q.Position, pr = p, z = z, n = pn, e = earnRate, k = tonumber(a and a.Rarity and a.Rarity.Rank) or 0}
-                end
+                o[#o + 1] = {u = u, p = q.Position, pr = p, z = z, n = pn, e = tonumber(a and a.EarningRate) or 0, k = tonumber(a and a.Rarity and a.Rarity.Rank) or 0}
             end
         end
         table.sort(o, function(x, y)
@@ -2482,15 +2413,6 @@ local function autoHalloweenLoopBody(generationId)
     local function sh3(en)
         local h0 = getRootAndHumanoid()
         local lq = h0 and h0.Position
-        if State.hinst then
-            local hr, hu = getRootAndHumanoid()
-            if hr then
-                hr.CFrame = CFrame.new(en)
-                hr.AssemblyLinearVelocity = Vector3.zero
-                task.wait(0.05)
-                return true
-            end
-        end
         while true do
             if not on() then return false, "Stopped" end
             if not hca() then return false, "Carry Ended" end
@@ -2537,10 +2459,6 @@ local function autoHalloweenLoopBody(generationId)
         return false, ok and "Not Delivered" or "Egg Lost | " .. tostring(wy)
     end
     local function ml()
-        if State.hbm then
-            local bm = workspace:GetAttribute("BloodMoonActive") or workspace:GetAttribute("BloodMoon") or workspace:GetAttribute("IsBloodMoon")
-            if bm ~= true then return {} end
-        end
         local m = workspace:FindFirstChild("HalloweenDimension")
         local o, h, t = {}, getRootAndHumanoid(), os.clock()
         for _, b in CollectionService:GetTagged("BatDamagable") do
@@ -3289,7 +3207,7 @@ local Icons = {
     CheckCircle2 = "rbxassetid://10709790644",
     MoonStar = "rbxassetid://10734897102",
     CornerUpRight = "rbxassetid://10723346684",
-    LogOut = "rbxassetid://10747384394",
+    Globe = "rbxassetid://10723407389",
 }
 Library.Icons = Icons
 
@@ -3364,230 +3282,8 @@ local function bindToggle(tab, opts)
     if frame then
         local lbl = frame:FindFirstChild("Title")
         if lbl then registerTranslation(name, lbl, false) end
-        local descLbl = frame:FindFirstChild("Desc")
-        if descLbl and opts.Description then registerTranslation(opts.Description, descLbl, false) end
     end
     return wrapper
-end
-
-
--- ============================================================================
--- [Chilli Hub V7 Enhancements] Hit Aura, Anti-AFK & Auto-Rejoin Engines
--- ============================================================================
-local hitAuraRunning = false
-local function startHitAuraLoop()
-    if hitAuraRunning then return end
-    hitAuraRunning = true
-    task.spawn(function()
-        while State.hitAura and globalEnv.__SaeAf == State do
-            pcall(function()
-                local hr, hu = getRootAndHumanoid()
-                if hr and hu and hu.Health > 0 then
-                    local myPos = hr.Position
-                    local range = State.hitAuraRange or 18
-                    local bat = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                    if not bat then
-                        local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
-                        bat = bp and (bp:FindFirstChild("Bat") or bp:FindFirstChildWhichIsA("Tool"))
-                        if bat then hu:EquipTool(bat) end
-                    end
-                    local targetFound = false
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        if player ~= LocalPlayer and player.Character then
-                            local oHr = player.Character:FindFirstChild("HumanoidRootPart")
-                            local oHu = player.Character:FindFirstChildOfClass("Humanoid")
-                            if oHr and oHu and oHu.Health > 0 and (oHr.Position - myPos).Magnitude <= range then
-                                targetFound = true
-                                break
-                            end
-                        end
-                    end
-                    if not targetFound then
-                        local w = workspace:FindFirstChild("World") or workspace
-                        local guards = w:FindFirstChild("Guards", true) or w:FindFirstChild("NPCs", true)
-                        if guards then
-                            for _, g in ipairs(guards:GetChildren()) do
-                                local gHr = g:FindFirstChild("HumanoidRootPart")
-                                if gHr and (gHr.Position - myPos).Magnitude <= range then
-                                    targetFound = true
-                                    break
-                                end
-                            end
-                        end
-                    end
-                    if targetFound then
-                        State.bsq = (State.bsq or 0) + 1
-                        local payload = string.format("%d:%d:%d", LocalPlayer.UserId, State.bsq, math.floor(workspace:GetServerTimeNow() * 1000))
-                        pcall(function()
-                            RemotesModule.BatSwing.Trigger:FireServer(nil, payload)
-                        end)
-                    end
-                end
-            end)
-            task.wait(0.2)
-        end
-        hitAuraRunning = false
-    end)
-end
-
-local antiAfkConnection = nil
-local function toggleAntiAfk(on)
-    State.antiAfk = on
-    if on then
-        if antiAfkConnection then antiAfkConnection:Disconnect() end
-        local VirtualUser = game:GetService("VirtualUser")
-        antiAfkConnection = LocalPlayer.Idled:Connect(function()
-            pcall(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new(0, 0))
-            end)
-        end)
-    else
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
-        end
-    end
-end
-
-local shootingStarRunning = false
-local function startShootingStarLoop()
-    if shootingStarRunning then return end
-    shootingStarRunning = true
-    task.spawn(function()
-        while State.sstar and globalEnv.__SaeAf == State do
-            pcall(function()
-                local star = workspace:FindFirstChild("ShootingStar")
-                    or workspace:FindFirstChild("FallingStar")
-                    or workspace:FindFirstChild("ActiveStar")
-                if not star then
-                    for _, child in ipairs(workspace:GetChildren()) do
-                        local low = child.Name:lower()
-                        if low:find("shootingstar") or low:find("star_event") or low == "star" then
-                            star = child
-                            break
-                        end
-                    end
-                end
-                if not star then
-                    for _, d in ipairs(workspace:GetDescendants()) do
-                        if d:IsA("ProximityPrompt") and (d.ActionText:lower():find("star") or d.ObjectText:lower():find("star") or d.Name:lower():find("star")) and d.Enabled then
-                            star = d.Parent
-                            break
-                        end
-                    end
-                end
-                if star then
-                    local hr, hu = getRootAndHumanoid()
-                    if hr and hu and hu.Health > 0 and not State.on then
-                        local starPos = star:IsA("Model") and star:GetPivot().Position or (star:IsA("BasePart") and star.Position or nil)
-                        if starPos then
-                            local groundPos = Vector3.new(starPos.X, getGroundY(starPos, Vector3.zero, 60) + 3, starPos.Z)
-                            updateStatusLog("Shooting Star Detected | Teleporting")
-                            hopToPosition(groundPos, nil, false)
-                            local prompt = star:FindFirstChildWhichIsA("ProximityPrompt", true)
-                            if prompt and prompt.Enabled then
-                                pcall(fireproximityprompt, prompt)
-                            end
-                            task.wait(1.5)
-                        end
-                    end
-                end
-            end)
-            task.wait(1.5)
-        end
-        shootingStarRunning = false
-    end)
-end
-
-local captureEggRunning = false
-local function startCaptureEggLoop()
-    if captureEggRunning then return end
-    captureEggRunning = true
-    task.spawn(function()
-        while State.cegg and globalEnv.__SaeAf == State do
-            pcall(function()
-                local hr, hu = getRootAndHumanoid()
-                if not (hr and hu and hu.Health > 0) then
-                    task.wait(1)
-                    return
-                end
-                local holdsEgg = LocalPlayer:GetAttribute("HoldingEventEgg") == true
-                    or (hr:FindFirstChild("EventEgg") ~= nil)
-                    or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("EventEgg") ~= nil)
-                if holdsEgg then
-                    local targetY = getGroundY(hr.Position, Vector3.zero, 60) + State.ceggHoldHeight
-                    local safePos = Vector3.new(hr.Position.X, targetY, hr.Position.Z)
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                            local otherPos = p.Character.HumanoidRootPart.Position
-                            local diff = Vector3.new(safePos.X - otherPos.X, 0, safePos.Z - otherPos.Z)
-                            if diff.Magnitude < State.ceggKeepAway and diff.Magnitude > 0.1 then
-                                safePos = safePos + diff.Unit * (State.ceggKeepAway - diff.Magnitude)
-                            end
-                        end
-                    end
-                    hr.CFrame = CFrame.new(safePos)
-                    hr.AssemblyLinearVelocity = Vector3.zero
-                    updateStatusLog("Holding Event Egg | Safe Height")
-                    task.wait(0.1)
-                    return
-                end
-                local egg = workspace:FindFirstChild("EventEgg") or workspace:FindFirstChild("CaptureTheEgg")
-                if not egg then
-                    for _, c in ipairs(workspace:GetChildren()) do
-                        if c.Name:lower():find("captureegg") or c.Name:lower():find("eventegg") then
-                            egg = c
-                            break
-                        end
-                    end
-                end
-                if egg then
-                    local ppos = egg:IsA("Model") and egg:GetPivot().Position or (egg:IsA("BasePart") and egg.Position or nil)
-                    if ppos then
-                        updateStatusLog("Teleporting To Event Egg")
-                        hopToPosition(ppos + Vector3.new(0, 2, 0), nil, false)
-                        local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        if prompt and prompt.Enabled then
-                            pcall(fireproximityprompt, prompt)
-                        end
-                        task.wait(0.5)
-                    end
-                end
-            end)
-            task.wait(0.5)
-        end
-        captureEggRunning = false
-    end)
-end
-
-local autoRejoinConnection = nil
-local function toggleAutoRejoin(on)
-    State.autoRejoin = on
-    if on then
-        if autoRejoinConnection then autoRejoinConnection:Disconnect() end
-        local GuiService = game:GetService("GuiService")
-        local TeleportService = game:GetService("TeleportService")
-        autoRejoinConnection = GuiService.ErrorMessageChanged:Connect(function(msg)
-            if State.autoRejoin and msg and msg ~= "" then
-                task.wait(1)
-                pcall(function()
-                    if #Players:GetPlayers() <= 1 then
-                        LocalPlayer:Kick("\nRejoining...")
-                        task.wait(0.5)
-                        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-                    else
-                        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-                    end
-                end)
-            end
-        end)
-    else
-        if autoRejoinConnection then
-            autoRejoinConnection:Disconnect()
-            autoRejoinConnection = nil
-        end
-    end
 end
 
 local function wrapTab(tab)
@@ -3600,14 +3296,12 @@ local function wrapTab(tab)
     function wrapped:Section(opts)
         local title = type(opts) == "table" and (opts.Name or opts.Title or opts[1] or "") or tostring(opts or "")
         local sec = tab:CreateSection(title)
-        local frame = tab.Page and tab.Page:GetChildren()[#tab.Page:GetChildren()]
+        local frame = tab.Page:GetChildren()[#tab.Page:GetChildren()]
         if frame then
             for _, c in ipairs(frame:GetChildren()) do
-                if c:IsA("TextLabel") and c.Text == "◈" then
-                    c.Text = "•"
-                    c.TextColor3 = Color3.fromRGB(56, 189, 248)
-                elseif c:IsA("TextLabel") then
+                if c:IsA("TextLabel") and c.Text ~= "◈" then
                     registerTranslation(title, c, true)
+                    break
                 end
             end
         end
@@ -3625,8 +3319,6 @@ local function wrapTab(tab)
         if frame then
             local lbl = frame:FindFirstChild("Title")
             if lbl then registerTranslation(name, lbl, false) end
-            local descLbl = frame:FindFirstChild("Desc")
-            if descLbl and opts.Description then registerTranslation(opts.Description, descLbl, false) end
         end
         return btn
     end
@@ -3710,7 +3402,6 @@ local function wrapTab(tab)
                 end
             end
             if asset then
-                local PList = frame:FindFirstChildOfClass("UIListLayout")
                 local PPad = frame:FindFirstChildOfClass("UIPadding")
                 if PPad then PPad.PaddingLeft = UDim.new(0, 36) end
                 local badge = Instance.new("Frame")
@@ -3773,7 +3464,6 @@ W.Tab = function(self, opts)
 end
 
 local pg = W:Tab({Name = "General", Icon = "egg"})
-
 local function getSortedRarityList()
     local m, o = {}, {}
     for _, a in pairs(AssetDirectory) do
@@ -3845,31 +3535,6 @@ State.ui.ae = pg:Toggle({
         local x = rawget(State.ui, "ahd")
         if v and x and x.v then x:Set(false) end
         if v then State.Start() else State.Stop() end
-    end
-})
-
-pg:Toggle({
-    Name = "Instant Steal",
-    Icon = "Zap",
-    Description = "Chilli-style direct teleport bypass & rapid egg delivery",
-    Default = false,
-    Flag = "ist",
-    Callback = function(v)
-        State.instantSteal = (v == true)
-    end
-})
-
-pg:Slider({
-    Name = "Min Steal Egg Value",
-    Icon = "Coins",
-    Description = "Skip eggs earning less than this /s value (0 = any)",
-    Min = 0,
-    Max = 100000000,
-    Step = 10000,
-    Default = 0,
-    Flag = "msv",
-    Callback = function(val)
-        State.minStealValue = val
     end
 })
 local xp = pg:Toggle({
@@ -3971,80 +3636,11 @@ State.ui.abf = et:Toggle({
     Default = false,
     Flag = "abf",
     Callback = function(v)
+        local x = rawget(State.ui, "ahd")
+        if v and x and x.v then x:Set(false) end
         State.bf = (v == true)
         State.bi += 1
         if State.bf then task.spawn(startAutoButterflyThread, State.bi) end
-    end
-})
-
-et:Dropdown({
-    Name = "Catch Priority",
-    Icon = "ListOrdered",
-    Description = "Priority order: Rarest first or Closest first",
-    Options = {"Rarest", "Closest"},
-    Default = "Rarest",
-    Flag = "bprio",
-    Callback = function(v)
-        State.bprio = tostring(v)
-    end
-})
-
-et:Dropdown({
-    Name = "Catch Mode",
-    Icon = "Footprints",
-    Description = "Movement mode: Chase or Teleport",
-    Options = {"Chase", "Teleport"},
-    Default = "Chase",
-    Flag = "bmode",
-    Callback = function(v)
-        State.bmode = tostring(v)
-    end
-})
-
-et:Slider({
-    Name = "Catch Speed",
-    Icon = "Gauge",
-    Description = "Flight / chase speed towards butterflies (studs/s)",
-    Min = 300,
-    Max = 1000,
-    Step = 20,
-    Default = 600,
-    Flag = "bspeed",
-    Callback = function(val)
-        State.bspeed = val
-    end
-})
-
-et:Toggle({
-    Name = "Auto Trade Up",
-    Icon = "RefreshCw",
-    Description = "Auto exchange 3 lower tier butterflies for 1 higher tier",
-    Default = false,
-    Flag = "btup",
-    Callback = function(v)
-        State.btup = (v == true)
-    end
-})
-
-et:Toggle({
-    Name = "Auto Craft Essence",
-    Icon = "Package",
-    Description = "Auto craft essence at Butterfly Machine inside Enchanted Tree",
-    Default = false,
-    Flag = "bess",
-    Callback = function(v)
-        State.bess = (v == true)
-    end
-})
-
-et:Toggle({
-    Name = "Auto Wisp Quest",
-    Icon = "CheckCircle2",
-    Description = "Auto accept, complete, and claim Wisp Companion quests",
-    Default = false,
-    Flag = "bwisp",
-    Callback = function(v)
-        State.bwisp = (v == true)
     end
 })
 
@@ -4078,7 +3674,7 @@ et:Button({
 et:Section({Name = "Halloween Dimension"})
 
 local function checkHalloweenThread()
-    if not (State.hd or State.hm or State.hx or State.pboss or State.pmoon) then return end
+    if not (State.hd or State.hm or State.hx) then return end
     if not isKeyValid() then
         updateStatusLog("Key Check Failed: No Valid Key")
         return
@@ -4104,42 +3700,6 @@ State.ui.ahd_steal = et:Toggle({
     end
 })
 
-et:Toggle({
-    Name = "Instant Steal Halloween Eggs",
-    Icon = "Zap",
-    Description = "Direct hop bypass to steal Halloween eggs instantly",
-    Default = false,
-    Flag = "ahd_instant",
-    Callback = function(v)
-        State.hinst = (v == true)
-    end
-})
-
-et:Slider({
-    Name = "Min Halloween Egg Value",
-    Icon = "Coins",
-    Description = "Skip Halloween eggs earning less than this /s value",
-    Min = 0,
-    Max = 100000000,
-    Step = 10000,
-    Default = 0,
-    Flag = "hmin",
-    Callback = function(val)
-        State.hmin = val
-    end
-})
-
-et:Toggle({
-    Name = "Auto Buy Halloween Egg",
-    Icon = "ShoppingBag",
-    Description = "Auto buy Halloween Dimension Egg when tokens >= 2,250",
-    Default = false,
-    Flag = "hbuy",
-    Callback = function(v)
-        State.hbuy = (v == true)
-    end
-})
-
 State.ui.ahd_farm = et:Toggle({
     Name = "Auto Farm Monsters",
     Icon = "Sword",
@@ -4149,17 +3709,6 @@ State.ui.ahd_farm = et:Toggle({
     Callback = function(v)
         State.hm = (v == true)
         checkHalloweenThread()
-    end
-})
-
-et:Toggle({
-    Name = "Only During Blood Moon",
-    Icon = "Moon",
-    Description = "Only farm monsters while Blood Moon is active",
-    Default = false,
-    Flag = "hbm",
-    Callback = function(v)
-        State.hbm = (v == true)
     end
 })
 
@@ -4199,8 +3748,19 @@ et:Button({
     end
 })
 
--- ==================== Phantom Express ====================
-et:Section({Name = "Phantom Express"})
+et:Button({
+    Name = "Buy Halloween Egg",
+    Icon = "Coins",
+    Description = "Purchase an egg at Halloween Shop (2,250 Tokens)",
+    Callback = function()
+        local ok, a, b = pcall(RemotesModule.HalloweenDimension.AskBuyEgg.InvokeServer, RemotesModule.HalloweenDimension.AskBuyEgg)
+        local msg = ok and (a and "Bought Halloween Egg!" or tostring(b or "Purchase Denied")) or tostring(a)
+        W:Notify({Title = "Buy Halloween Egg", Text = msg, Error = not (ok and a)})
+    end
+})
+
+-- ==================== Ghost Train ====================
+et:Section({Name = "Ghost Train"})
 
 State.ui.ahd_train = et:Toggle({
     Name = "Auto Phantom Express",
@@ -4211,28 +3771,6 @@ State.ui.ahd_train = et:Toggle({
     Callback = function(v)
         State.hx = (v == true)
         checkHalloweenThread()
-    end
-})
-
-et:Toggle({
-    Name = "Auto Vacuum Ghouler Boss",
-    Icon = "Flame",
-    Description = "Auto equip vacuum, dodge attacks & suck ghosts / boss",
-    Default = true,
-    Flag = "pms",
-    Callback = function(v)
-        State.pms = (v == true)
-    end
-})
-
-et:Toggle({
-    Name = "Auto Trade Souls",
-    Icon = "Gift",
-    Description = "Auto trade 1,000 Spectral Souls at Soul Keeper",
-    Default = true,
-    Flag = "pts",
-    Callback = function(v)
-        State.pts = (v == true)
     end
 })
 
@@ -4247,56 +3785,14 @@ et:Button({
     end
 })
 
--- ==================== Pumpkin Boss & Moon ====================
-et:Section({Name = "Pumpkin Boss"})
-
 et:Toggle({
-    Name = "Auto Pumpkin Boss",
-    Icon = "ShieldAlert",
-    Description = "Auto enter and fight the Pumpkin Boss in town",
+    Name = "Train Candy Suction",
+    Icon = "RefreshCw",
+    Description = "Activate vacuum suction for floating event candies",
     Default = false,
-    Flag = "pboss",
+    Flag = "tcs",
     Callback = function(v)
-        State.pboss = (v == true)
-        checkHalloweenThread()
-    end
-})
-
-et:Toggle({
-    Name = "Auto Dodge Attacks",
-    Icon = "ShieldCheck",
-    Description = "Auto dodge attacks and windups from Pumpkin Boss",
-    Default = true,
-    Flag = "pdodge",
-    Callback = function(v)
-        State.pdodge = (v == true)
-    end
-})
-
-et:Toggle({
-    Name = "Auto Pumpkin Moon",
-    Icon = "MoonStar",
-    Description = "Auto farm Pumpkin Moon event activities",
-    Default = false,
-    Flag = "pmoon",
-    Callback = function(v)
-        State.pmoon = (v == true)
-        checkHalloweenThread()
-    end
-})
-
--- ==================== Shooting Star ====================
-et:Section({Name = "Shooting Star"})
-
-et:Toggle({
-    Name = "Auto Catch Shooting Star",
-    Icon = "Star",
-    Description = "Auto detect falling stars in workspace, hop & claim reward",
-    Default = false,
-    Flag = "sstar",
-    Callback = function(v)
-        State.sstar = (v == true)
-        if State.sstar then startShootingStarLoop() end
+        pcall(function() RemotesModule.TrainEvent.Suction:FireServer(v == true) end)
     end
 })
 
@@ -4336,18 +3832,6 @@ State.ui.atx = et:Toggle({
     end
 })
 
-State.ui.ace = et:Toggle({
-    Name = "Auto Capture The Egg",
-    Icon = "Trophy",
-    Description = "Auto capture event egg, float 38 studs high & keep away from players",
-    Default = false,
-    Flag = "ace",
-    Callback = function(v)
-        hz3(v)
-        State.cegg = (v == true)
-        if State.cegg then startCaptureEggLoop() end
-    end
-})
 local mi = W:Tab({Name = "Misc", Icon = "four-squares-grid"})
 mi:Section({Name = "Player"})
 mi:Toggle({
@@ -4367,94 +3851,30 @@ local antiTrapToggle = mi:Toggle({
     Callback = function(v) toggleAntiTrap(v == true) end
 })
 
-mi:Toggle({
-    Name = "Hit Aura",
-    Icon = "Sword",
-    Description = "Auto swing bat at nearby players & guards to defend eggs",
-    Default = false,
-    Flag = "ha",
-    Callback = function(v)
-        State.hitAura = (v == true)
-        if State.hitAura then startHitAuraLoop() end
-    end
-})
-
-mi:Slider({
-    Name = "Hit Aura Range",
-    Icon = "Crosshair",
-    Description = "Distance in studs to detect and hit enemies",
-    Min = 10,
-    Max = 30,
-    Step = 1,
-    Default = 18,
-    Flag = "har",
-    Callback = function(val)
-        State.hitAuraRange = val
-    end
-})
-
-mi:Toggle({
-    Name = "Anti AFK",
-    Icon = "Clock",
-    Description = "Prevent 20-minute Roblox idle disconnect kick",
-    Default = true,
-    Flag = "aafk",
-    Callback = function(v)
-        toggleAntiAfk(v == true)
-    end
-})
-toggleAntiAfk(true)
-
 local tp2 = W:Tab({Name = "Teleport", Icon = "person-teleport"})
 tp2:Section({Name = "Server"})
-for _, z in {
-    {"Hop Server", false, "Globe", "Teleport to another random public server"},
-    {"Hop Low Server", true, "Server", "Teleport to a low-player server for safer farming"}
-} do
-    tp2:Button({
-        Name = z[1],
-        Icon = z[3],
-        Description = z[4],
-        Callback = function()
-            if State.hq then
-                W:Notify({Title = z[1], Text = "Already Hopping"})
-                return
-            end
-            State.hq = true
-            W:Notify({Title = z[1], Text = "Hopping"})
-            task.spawn(function()
-                local ok, wy = hopServer(z[2])
-                State.hq = false
-                if not ok then W:Notify({Title = z[1], Text = tostring(wy), Error = true}) end
-            end)
+for _, z in {{"Hop Server", false}, {"Hop Low Server", true}} do
+    tp2:Button({Name = z[1], Callback = function()
+        if State.hq then
+            W:Notify({Title = z[1], Text = "Already Hopping"})
+            return
         end
-    })
+        State.hq = true
+        W:Notify({Title = z[1], Text = "Hopping"})
+        task.spawn(function()
+            local ok, wy = hopServer(z[2])
+            State.hq = false
+            if not ok then W:Notify({Title = z[1], Text = tostring(wy), Error = true}) end
+        end)
+    end})
 end
-
-tp2:Toggle({
-    Name = "Auto Rejoin When Disconnected",
-    Icon = "RefreshCw",
-    Description = "Auto reconnect if kicked or disconnected (Error 277 / 268)",
-    Default = true,
-    Flag = "arj",
-    Callback = function(v)
-        toggleAutoRejoin(v == true)
-    end
-})
-toggleAutoRejoin(true)
 
 local tz = W:Tab({Name = "Setting", Icon = "gear"})
 tz:Section({Name = "Game"})
-tz:Button({
-    Name = "FPS Booster",
-    Icon = "Cpu",
-    Description = "Optimize 3D rendering, remove particles & boost FPS",
-    Callback = function()
-        local ok, e = enableFpsBooster()
-        W:Notify({Title = "FPS Booster", Text = ok and "On Until Rejoin" or e, Error = not ok and e ~= "Already On"})
-    end
-})
-
+tz:Button({Name = "FPS Booster", Callback = function()
+    local ok, e = enableFpsBooster()
+    W:Notify({Title = "FPS Booster", Text = ok and "On Until Rejoin" or e, Error = not ok and e ~= "Already On"})
+end})
 local lgv, lgd = false, {
     ["Select Area"] = "Chọn Khu Vực",
     ["Select Egg"] = "Chọn Trứng",
@@ -4469,40 +3889,16 @@ local lgv, lgd = false, {
     ["Auto Sell Egg"] = "Tự Động Bán Trứng",
     ["Butterfly Event"] = "Sự Kiện Bướm",
     ["Auto Butterfly Bloom"] = "Tự Động Bắt Bướm",
-    ["Catch Priority"] = "Ưu Tiên Bắt",
-    ["Catch Mode"] = "Chế Độ Bắt",
-    ["Catch Speed"] = "Tốc Độ Bắt",
-    ["Auto Trade Up"] = "Tự Động Đổi Bướm Cấp Cao",
-    ["Auto Craft Essence"] = "Tự Động Chế Tạo Tinh Chất",
-    ["Auto Wisp Quest"] = "Tự Động Nhiệm Vụ Wisp",
-    ["Auto Steal Halloween Eggs"] = "Tự Động Cướp Trứng Halloween",
-    ["Instant Steal Halloween Eggs"] = "Cướp Trứng Halloween Tức Thì",
-    ["Min Halloween Egg Value"] = "Giá Trị Trứng Halloween Tối Thiểu",
-    ["Auto Buy Halloween Egg"] = "Tự Động Mua Trứng Halloween",
-    ["Auto Farm Monsters"] = "Tự Động Đánh Quái Halloween",
-    ["Only During Blood Moon"] = "Chỉ Đánh Trong Mặt Trăng Máu",
-    ["Phantom Express"] = "Chuyến Tàu Ma Ghost Train",
-    ["Auto Phantom Express"] = "Tự Động Lên Tàu Ma",
-    ["Auto Vacuum Ghouler Boss"] = "Hút Boss & Ma Quái",
-    ["Auto Trade Souls"] = "Tự Động Đổi Linh Hồn",
-    ["Board Ghost Train"] = "Lên Tàu Ma Ghost Train",
-    ["Pumpkin Boss"] = "Trùm Bí Ngô",
-    ["Auto Pumpkin Boss"] = "Tự Động Đánh Trùm Bí Ngô",
-    ["Auto Dodge Attacks"] = "Tự Động Né Đòn Trùm",
-    ["Auto Pumpkin Moon"] = "Tự Động Pumpkin Moon",
-    ["Shooting Star"] = "Sao Băng Rơi",
-    ["Auto Catch Shooting Star"] = "Tự Động Nhặt Sao Băng",
-    ["Auto Capture The Egg"] = "Tự Động Cướp & Giữ Trứng Sự Kiện",
-    ["Auto Butterfly"] = "Tự Động Bắt Bướm",
     ["Teleport To Station"] = "Dịch Chuyển Tới Trạm / Cây",
-    ["Teleport To Meadow"] = "Dịch Chuyển Đến Bãi Bướm",
     ["Claim Net"] = "Nhận Vợt Bắt Bướm",
     ["Halloween Dimension"] = "Thế Giới Halloween",
-    ["Auto Halloween"] = "Tự Động Halloween",
+    ["Auto Steal Halloween Eggs"] = "Tự Động Cướp Trứng Halloween",
+    ["Auto Farm Monsters"] = "Tự Động Đánh Quái Halloween",
     ["Enter Halloween Portal"] = "Vào Cổng Halloween",
     ["Exit To Home Base"] = "Về Căn Cứ Sảnh Chính",
     ["Buy Halloween Egg"] = "Mua Trứng Halloween",
     ["Ghost Train"] = "Tàu Ma Ghost Train",
+    ["Auto Phantom Express"] = "Tự Động Lên Tàu Ma",
     ["Board Ghost Train"] = "Lên Tàu Ma Ghost Train",
     ["Train Candy Suction"] = "Hút Kẹo & Hồn Tàu Ma",
     ["Minigames"] = "Trò Chơi Sự Kiện",
@@ -4537,14 +3933,16 @@ local lgv, lgd = false, {
     ["Auto sell hatched pets matching selected rarities"] = "Tự động bán pet đã nở theo độ hiếm đã chọn",
     ["Auto sell unhatched inventory eggs matching rarities"] = "Tự động bán trứng chưa nở trong túi theo độ hiếm",
     ["Auto catch butterflies & complete Wisp quests"] = "Tự động bắt bướm và hoàn thành nhiệm vụ Wisp",
+    ["Auto catch butterflies when Bloom event begins"] = "Tự động bắt bướm khi sự kiện bắt đầu",
     ["Teleport character to Butterfly Event zone or tree"] = "Dịch chuyển nhân vật đến khu sự kiện bướm hoặc cây thần",
-    ["Direct teleport to Butterfly Bloom spawn meadow"] = "Dịch chuyển trực tiếp đến bãi hoa xuất hiện bướm",
     ["Interact with Net Stand inside tree to claim net"] = "Tương tác với giá để nhận vợt bắt bướm bên trong cây",
-    ["Farm Halloween candies, souls & ghost train boss"] = "Tự động nhặt kẹo, linh hồn và đánh boss tàu ma",
+    ["Auto steal & deliver eggs from Halloween Dimension"] = "Tự động cướp và nộp trứng từ thế giới Halloween",
+    ["Auto attack Halloween monsters (Candy Corn, Bat, Scarecrow, Golem, Phantom)"] = "Tự động đánh quái vật Halloween",
     ["Teleport through portal into Halloween Dimension"] = "Dịch chuyển qua cổng vào thế giới ma Halloween",
     ["Return from Halloween Dimension to main lobby"] = "Rời thế giới ma quay trở về sảnh chính",
-    ["Instantly purchase an egg at Halloween Shop (2,250 Tokens)"] = "Mua ngay 1 quả trứng ma tại quầy (2.250 Tokens)",
-    ["Board the ghost train when arriving at the station"] = "Nhảy lên tàu ma khi tàu cập bến tại ga",
+    ["Purchase an egg at Halloween Shop (2,250 Tokens)"] = "Mua ngay 1 quả trứng ma tại quầy (2.250 Tokens)",
+    ["Auto board ghost train when arriving at the station"] = "Tự động lên tàu ma khi tàu cập bến tại ga",
+    ["Board the ghost train immediately if at station"] = "Nhảy lên tàu ma ngay lập tức nếu đang ở ga",
     ["Activate vacuum suction for floating event candies"] = "Bật lực hút tự động gom kẹo và linh hồn bay quanh tàu",
     ["Auto complete Squid Game style minigame safely"] = "Tự động vượt qua minigame đèn xanh đèn đỏ an toàn",
     ["Auto run & dodge obstacles in T-Rex temple run"] = "Tự động chạy và né chướng ngại vật trong đền T-Rex",
@@ -4552,9 +3950,8 @@ local lgv, lgd = false, {
     ["Disable touch traps and bear traps in enemy bases"] = "Vô hiệu hóa bẫy chạm và bẫy gấu trong căn cứ địch",
     ["Teleport to another random public server"] = "Chuyển sang một máy chủ công khai ngẫu nhiên khác",
     ["Teleport to a low-player server for safer farming"] = "Chuyển sang server ít người để farm an toàn hơn",
-    ["Optimize 3D rendering, remove particles & boost FPS"] = "Tối ưu hóa hình ảnh 3D, xóa hạt hiệu ứng để tăng FPS",
+    ["Optimize 3D rendering, remove particles & boost FPS"] = "Tối ưu hóa hình ảnh 3D, xóa hạt hiệu ứng để tăng FPS"
 }
-
 local function applyLanguageTranslations()
     for _, item in ipairs(translatableElements) do
         if item.label and item.label.Parent then
@@ -4567,20 +3964,10 @@ local function applyLanguageTranslations()
         end
     end
 end
-
-tz:Section({Name = "Language"})
-tz:Dropdown({
-    Name = "Select Language",
-    Icon = "Globe",
-    Options = {"Vietnamese", "English"},
-    Default = "English",
-    Flag = "lg",
-    Callback = function(v)
-        lgv = v == "Vietnamese"
-        applyLanguageTranslations()
-    end
-})
-
+tz:Dropdown({Name = "Select Language", Options = {"Vietnamese", "English"}, Default = "English", Flag = "lg", Callback = function(v)
+    lgv = v == "Vietnamese"
+    applyLanguageTranslations()
+end})
 local sdf = {}
 for _, r in {
     {"Steal Hop Distance", "shd", 50, 400, 1, "hs"},
@@ -4594,15 +3981,10 @@ for _, r in {
     local e = tz:Slider({Name = r[1], Flag = r[2], Min = r[3], Max = r[4], Step = r[5], Default = d0, Callback = function(v) State[k] = v end})
     State[k], sdf[#sdf + 1] = e.v, {e, d0}
 end
-tz:Button({
-    Name = "Default Setting",
-    Icon = "RotateCcw",
-    Description = "Reset all slider values back to default",
-    Callback = function()
-        for _, x in sdf do x[1]:Set(x[2]) end
-        W:Notify({Title = "Default Setting", Text = "Back To Default"})
-    end
-})
+tz:Button({Name = "Default Setting", Callback = function()
+    for _, x in sdf do x[1]:Set(x[2]) end
+    W:Notify({Title = "Default Setting", Text = "Back To Default"})
+end})
 applyLanguageTranslations()
 State.gr = true
 
@@ -4647,4 +4029,3 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
-
