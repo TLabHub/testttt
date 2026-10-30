@@ -1,4 +1,5 @@
 
+
 -- ============================================================================
 -- ngao_deobf.lua - Deobfuscated & Semantically Refactored
 -- Project: Steal An Egg (Ngao - Gaming Hub)
@@ -305,7 +306,21 @@ local function getCandidateFieldEggs()
     for _, r in s.Records or {} do
         local a = AssetDirectory[r.AssetCategory]
         local wt
-        if State.wf then wt = State.wf.a and r.AreaId == State.wf.a or State.wf.r and a and a.Rarity and a.Rarity._id == State.wf.r or false elseif State.pi then wt = ix[r.AssetCategory] ~= true and not oc[r.AssetCategory] elseif next(State.az) then wt = State.az[r.AreaId] == true else wt = a and a.Rarity and State.mr[a.Rarity._id] end
+        if State.wf then
+            wt = State.wf.a and r.AreaId == State.wf.a or State.wf.r and a and a.Rarity and a.Rarity._id == State.wf.r or false
+        elseif State.pi then
+            wt = ix[r.AssetCategory] ~= true and not oc[r.AssetCategory]
+        else
+            local matchArea = true
+            if next(State.az) then
+                matchArea = State.az[r.AreaId] == true
+            end
+            local matchRarity = true
+            if next(State.mr) then
+                matchRarity = a and a.Rarity and State.mr[a.Rarity._id] == true
+            end
+            wt = matchArea and matchRarity
+        end
         if a and (r.State == "Slot" or r.State == "Dropped") and typeof(r.BoundsCFrame) == "CFrame" and (State.bl[r.Uid] or 0) < t and wt then
             o[#o + 1] = {u = r.Uid, r = r, k = tonumber(a.Rarity and a.Rarity.Rank) or 0, e = tonumber(a.EarningRate) or 0, p = r.BoundsCFrame.Position}
         end
@@ -1305,12 +1320,26 @@ local function bc()
         if ok and a == true and type(e) == "number" and e > t then return "Butterfly Bloom Active: " .. tf(e - t) .. " Left" end
     end
     local function fv2(k)
-        local f = bfl and bfl[k]
-        return type(f) == "table" and f.Value or nil
+        if not bfl then return nil end
+        local f = bfl[k]
+        if type(f) == "table" and f.Value ~= nil then return f.Value end
+        if typeof(f) == "Instance" and f:IsA("ValueBase") then return f.Value end
+        if f ~= nil then return f end
+        if type(bfl.Get) == "function" then
+            local ok, v = pcall(bfl.Get, bfl, k)
+            if ok and v ~= nil then return v end
+        end
+        return nil
     end
-    if fv2("Enabled") == false then return "Next Butterfly Bloom: Disabled" end
+    if fv2("Enabled") == false then return "Butterfly Bloom: Event Inactive" end
     local i, o = tonumber(fv2("IntervalSeconds")), tonumber(fv2("OffsetSeconds"))
-    if not (i and o and i > 0) then return "Next Butterfly Bloom: Unknown" end
+    if not (i and o and i > 0) then
+        local attrTime = workspace:GetAttribute("NextButterflyBloom") or workspace:GetAttribute("ButterflyBloomTime")
+        if type(attrTime) == "number" and attrTime > t then
+            return "Next Butterfly Bloom: " .. tf(attrTime - t)
+        end
+        return "Butterfly Bloom: Waiting For Event (Hourly)"
+    end
     return "Next Butterfly Bloom: " .. tf(o + math.ceil((t - o) / i) * i - t)
 end
 
@@ -1487,18 +1516,49 @@ local function bu()
     if State.hd or State.hm or State.hx then return false, "Teleport Failed: Halloween Running" end
     if State.bo then return false, "Teleport Failed: Busy" end
     local p = bn2()
-    if not p then return false, "Teleport Failed: No Tree" end
+    local b = bz()
     local function ck() if State.on then return "Stopped" end return nil end
     State.bo = true
-    local ok, r = bj(p, ck)
-    if not ok then State.bo = false return false, fp("Teleport Failed", r) end
-    local h = getRootAndHumanoid()
-    if not h then State.bo = false return false, "Teleport Failed: No Character" end
-    local o2, wy = moveToTarget(Vector3.new(p.an.Position.X - 5, h.Position.Y, p.an.Position.Z), ck, 10)
-    setFreezeAnimation(false)
+
+    -- 1. Try Tree interior if Wisp Companion is unlocked
+    local okSave, sData = pcall(SaveModule.Await)
+    local wispComp = okSave and type(sData) == "table" and sData.WispCompanion
+    local isWispUnlocked = (type(wispComp) == "table" and wispComp.Unlocked == true)
+
+    if p and isWispUnlocked then
+        local okEnter, rEnter = bj(p, ck)
+        if okEnter then
+            local h = getRootAndHumanoid()
+            if h then moveToTarget(Vector3.new(p.an.Position.X - 5, h.Position.Y, p.an.Position.Z), ck, 10) end
+            setFreezeAnimation(false)
+            State.bo = false
+            return true, "At Wisp Net Stand"
+        end
+    end
+
+    -- 2. Fallback: Direct hop to Butterfly Bloom meadow
+    if b then
+        local okHop, wyHop = hopToPosition(b.Position + Vector3.new(0, 3, 0), nil, false, ck)
+        setFreezeAnimation(false)
+        State.bo = false
+        if okHop then
+            return true, isWispUnlocked and "At Butterfly Meadow" or "At Meadow (Wisp Locked in game)"
+        end
+    end
+
+    -- 3. Fallback: Hop to outside tree entrance
+    if p and p.en then
+        local q = p.en.WorldPosition
+        local okHop, wyHop = hopToPosition(Vector3.new(q.X, getGroundY(q, Vector3.zero, 60) - State.gh + 3, q.Z), nil, false, ck)
+        setFreezeAnimation(false)
+        State.bo = false
+        if okHop then
+            return true, "At Tree Entrance (Wisp Locked)"
+        end
+    end
+
     State.bo = false
-    if not o2 then return false, fp("Teleport Failed", wy) end
-    return true
+    return false, "Teleport Failed: No Station or Meadow found"
 end
 
 local wqd = (function()
@@ -3079,6 +3139,72 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/TLabH
 task.wait(0.1)
 table.clear(Library._tabs)
 
+local Icons = {
+    Logo = "rbxassetid://10734951847",
+    Home = "rbxassetid://10723407389",
+    Settings = "rbxassetid://10734950309",
+    Search = "rbxassetid://10734943674",
+    Bell = "rbxassetid://10709775704",
+    Menu = "rbxassetid://10734887784",
+    Sliders = "rbxassetid://10734963400",
+    Filter = "rbxassetid://10723375128",
+    Info = "rbxassetid://10723415903",
+    Help = "rbxassetid://10723406988",
+    ExternalLink = "rbxassetid://10723346684",
+    Sword = "rbxassetid://10734975486",
+    Swords = "rbxassetid://10734975692",
+    Axe = "rbxassetid://10709769508",
+    Crosshair = "rbxassetid://10709818534",
+    Target = "rbxassetid://10734977012",
+    Shield = "rbxassetid://10734951847",
+    ShieldAlert = "rbxassetid://10734951173",
+    ShieldCheck = "rbxassetid://10734951367",
+    Skull = "rbxassetid://10734962068",
+    Flame = "rbxassetid://10723376114",
+    Zap = "rbxassetid://10709805727",
+    Gamepad = "rbxassetid://10723395457",
+    Trophy = "rbxassetid://10747363809",
+    Crown = "rbxassetid://10709818626",
+    Award = "rbxassetid://10709769406",
+    Star = "rbxassetid://10734966248",
+    Heart = "rbxassetid://10723406885",
+    Sparkles = "rbxassetid://10734966248",
+    User = "rbxassetid://10747373176",
+    Player = "rbxassetid://10747373176",
+    Users = "rbxassetid://10747373426",
+    Backpack = "rbxassetid://10709769841",
+    Coins = "rbxassetid://10709811110",
+    DollarSign = "rbxassetid://10723343958",
+    Gift = "rbxassetid://10723396402",
+    Package = "rbxassetid://10734909540",
+    Box = "rbxassetid://10709782497",
+    Server = "rbxassetid://10734949856",
+    Activity = "rbxassetid://10709752035",
+    Clock = "rbxassetid://10709805144",
+    Gauge = "rbxassetid://10723395708",
+    Compass = "rbxassetid://10709811445",
+    MapPin = "rbxassetid://10734886004",
+    Play = "rbxassetid://10734923549",
+    Pause = "rbxassetid://10734919336",
+    Refresh = "rbxassetid://10734933222",
+    RefreshCw = "rbxassetid://10734933222",
+    RotateCcw = "rbxassetid://10734940376",
+    Power = "rbxassetid://10734930466",
+    Trash = "rbxassetid://10747362393",
+    Check = "rbxassetid://10709790644",
+    X = "rbxassetid://10747384394",
+    Close = "rbxassetid://10747384394",
+    Lock = "rbxassetid://10723434711",
+    Unlock = "rbxassetid://10747366027",
+    Folder = "rbxassetid://10723387563",
+    File = "rbxassetid://10723374641",
+    Code = "rbxassetid://10709810463",
+    Terminal = "rbxassetid://10734982144",
+    Sun = "rbxassetid://10734974297",
+    Moon = "rbxassetid://10734897102",
+}
+Library.Icons = Icons
+
 local Window = Library:CreateWindow({
     Title = "TLab Hub | Steal An Egg",
     SubTitle = "PRO v1.0",
@@ -3166,12 +3292,14 @@ local function wrapTab(tab)
     function wrapped:Section(opts)
         local title = type(opts) == "table" and (opts.Name or opts.Title or opts[1] or "") or tostring(opts or "")
         local sec = tab:CreateSection(title)
-        local frame = tab.Page:GetChildren()[#tab.Page:GetChildren()]
+        local frame = tab.Page and tab.Page:GetChildren()[#tab.Page:GetChildren()]
         if frame then
             for _, c in ipairs(frame:GetChildren()) do
-                if c:IsA("TextLabel") and c.Text ~= "◈" then
+                if c:IsA("TextLabel") and c.Text == "◈" then
+                    c.Text = "•"
+                    c.TextColor3 = Color3.fromRGB(56, 189, 248)
+                elseif c:IsA("TextLabel") then
                     registerTranslation(title, c, true)
-                    break
                 end
             end
         end
@@ -3257,11 +3385,50 @@ local function wrapTab(tab)
 
     function wrapped:Label(opts)
         opts = opts or {}
-        local text = opts.Text or opts.Title or ""
+        local titleText = opts.Title or opts.Text or ""
+        local contentText = opts.Content or (opts.Title and opts.Text) or ""
+        local iconKey = opts.Icon
         local p = tab:CreateParagraph({
-            Title = text,
-            Content = opts.Content or ""
+            Title = titleText,
+            Content = contentText
         })
+        local frame = tab.Page and tab.Page:GetChildren()[#tab.Page:GetChildren()]
+        if frame and iconKey and Library.Icons then
+            local clean = tostring(iconKey):gsub("[-_ %s]", ""):lower()
+            local asset = Library.Icons[iconKey]
+            if not asset then
+                for k, v in pairs(Library.Icons) do
+                    if k:lower() == clean then asset = v break end
+                end
+            end
+            if asset then
+                local PList = frame:FindFirstChildOfClass("UIListLayout")
+                local PPad = frame:FindFirstChildOfClass("UIPadding")
+                if PPad then PPad.PaddingLeft = UDim.new(0, 36) end
+                local badge = Instance.new("Frame")
+                badge.Name = "IconBadge"
+                badge.Size = UDim2.new(0, 20, 0, 20)
+                badge.Position = UDim2.new(0, 8, 0, 8)
+                badge.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+                badge.BorderSizePixel = 0
+                badge.Parent = frame
+                local cr = Instance.new("UICorner")
+                cr.CornerRadius = UDim.new(0, 4)
+                cr.Parent = badge
+                local st = Instance.new("UIStroke")
+                st.Color = Color3.fromRGB(30, 45, 65)
+                st.Thickness = 0.8
+                st.Parent = badge
+                local img = Instance.new("ImageLabel")
+                img.Size = UDim2.new(0, 12, 0, 12)
+                img.AnchorPoint = Vector2.new(0.5, 0.5)
+                img.Position = UDim2.new(0.5, 0, 0.5, 0)
+                img.BackgroundTransparency = 1
+                img.Image = asset
+                img.ImageColor3 = Color3.fromRGB(0, 230, 255)
+                img.Parent = badge
+            end
+        end
         local lObj = {
             _p = p,
             Set = function(_, t)
@@ -3269,6 +3436,9 @@ local function wrapTab(tab)
             end,
             SetText = function(_, t)
                 p:SetTitle(tostring(t))
+            end,
+            SetContent = function(_, c)
+                p:SetContent(tostring(c))
             end
         }
         return lObj
@@ -3344,7 +3514,6 @@ xa = pg:Dropdown({
     Flag = "ar",
     Callback = function(v)
         State.az = rs2(v)
-        if #v > 0 and xe then xe:Set({}) end
     end
 })
 xe = pg:Dropdown({
@@ -3356,7 +3525,6 @@ xe = pg:Dropdown({
     Flag = "mr",
     Callback = function(v)
         State.mr = rs2(v)
-        if #v > 0 and xa then xa:Set({}) end
     end
 })
 State.ui.ae = pg:Toggle({
@@ -3447,18 +3615,24 @@ pg:Toggle({
     Callback = function(v) State.es = v end
 })
 
-local et = W:Tab({Name = "Event", Icon = "calendar-star"})
-et:Section({Name = "Butterfly"})
-local xb = et:Label({Text = bc()})
+local et = W:Tab({Name = "Event", Icon = "Sparkles"})
+
+et:Section({Name = "Butterfly Event"})
+local xb = et:Label({
+    Title = bc(),
+    Text = "Auto catches highest tier butterflies & completes Wisp quests",
+    Icon = "Clock"
+})
 task.spawn(function()
     while globalEnv.__SaeAf == State do
         pcall(function() xb:Set(bc()) end)
         task.wait(1)
     end
 end)
+
 State.ui.abf = et:Toggle({
     Name = "Auto Butterfly",
-    Icon = "Flame",
+    Icon = "Sparkles",
     Description = "Auto catch butterflies & complete Wisp quests",
     Default = false,
     Flag = "abf",
@@ -3470,18 +3644,24 @@ State.ui.abf = et:Toggle({
         if State.bf then task.spawn(startAutoButterflyThread, State.bi) end
     end
 })
+
 et:Button({
     Name = "Teleport To Station",
     Icon = "Compass",
-    Description = "Teleport character to Butterfly Event zone",
+    Description = "Teleport character to Butterfly Event zone or tree",
     Callback = function()
         local ok, wy = bu()
         updateStatusLog(ok and "At Station" or tostring(wy))
-        W:Notify({Title = "Teleport To Station", Text = ok and "At Station" or tostring(wy), Error = not ok})
+        W:Notify({
+            Title = "Teleport To Station",
+            Text = ok and tostring(wy or "At Station") or tostring(wy),
+            Duration = 4,
+            Error = not ok
+        })
     end
 })
 
-et:Section({Name = "Halloween"})
+et:Section({Name = "Halloween Dimension"})
 local function hq()
     if not (State.hd or State.hm or State.hx) then return end
     if not isKeyValid() then
@@ -3500,6 +3680,7 @@ local function hz3(v)
     local x = rawget(State.ui, "ahd")
     if v and x and x.v then x:Set(false) end
 end
+
 State.ui.ahd = et:Toggle({
     Name = "Auto Halloween",
     Icon = "Skull",
@@ -3512,7 +3693,7 @@ State.ui.ahd = et:Toggle({
     end
 })
 
-et:Section({Name = "Admin"})
+et:Section({Name = "Minigames"})
 State.ui.arl = et:Toggle({
     Name = "Auto Red Light Green Light",
     Icon = "Activity",
@@ -3609,9 +3790,20 @@ local lgv, lgd = false, {
     ["Auto Sell Pet"] = "Tự Động Bán Pet",
     ["Sell Egg Rarity"] = "Độ Hiếm Trứng Cần Bán",
     ["Auto Sell Egg"] = "Tự Động Bán Trứng",
+    ["Butterfly Event"] = "Sự Kiện Bướm",
     ["Auto Butterfly"] = "Tự Động Bắt Bướm",
-    ["Teleport To Station"] = "Dịch Chuyển Tới Nhà Ga",
+    ["Teleport To Station"] = "Dịch Chuyển Tới Trạm / Cây",
+    ["Teleport To Meadow"] = "Dịch Chuyển Đến Bãi Bướm",
+    ["Claim Net"] = "Nhận Vợt Bắt Bướm",
+    ["Halloween Dimension"] = "Thế Giới Halloween",
     ["Auto Halloween"] = "Tự Động Halloween",
+    ["Enter Halloween Portal"] = "Vào Cổng Halloween",
+    ["Exit To Home Base"] = "Về Căn Cứ Sảnh Chính",
+    ["Buy Halloween Egg"] = "Mua Trứng Halloween",
+    ["Ghost Train"] = "Tàu Ma Ghost Train",
+    ["Board Ghost Train"] = "Lên Tàu Ma Ghost Train",
+    ["Train Candy Suction"] = "Hút Kẹo & Hồn Tàu Ma",
+    ["Minigames"] = "Trò Chơi Sự Kiện",
     ["Auto Red Light Green Light"] = "Tự Động Đèn Xanh Đèn Đỏ",
     ["Auto T-Rex Run"] = "Tự Động Chạy T-Rex",
     ["Anti Stun"] = "Chống Choáng",
@@ -3630,9 +3822,6 @@ local lgv, lgd = false, {
     ["Farm"] = "Nông Trại",
     ["Pet"] = "Thú Cưng",
     ["Egg"] = "Trứng",
-    ["Butterfly"] = "Bắt Bướm",
-    ["Halloween"] = "Lễ Hội Ma",
-    ["Admin"] = "Quản Trị",
     ["Player"] = "Người Chơi",
     ["Server"] = "Máy Chủ",
     ["Game"] = "Trò Chơi",
@@ -3646,8 +3835,15 @@ local lgv, lgd = false, {
     ["Auto sell hatched pets matching selected rarities"] = "Tự động bán pet đã nở theo độ hiếm đã chọn",
     ["Auto sell unhatched inventory eggs matching rarities"] = "Tự động bán trứng chưa nở trong túi theo độ hiếm",
     ["Auto catch butterflies & complete Wisp quests"] = "Tự động bắt bướm và hoàn thành nhiệm vụ Wisp",
-    ["Teleport character to Butterfly Event zone"] = "Dịch chuyển nhân vật đến khu sự kiện bướm",
+    ["Teleport character to Butterfly Event zone or tree"] = "Dịch chuyển nhân vật đến khu sự kiện bướm hoặc cây thần",
+    ["Direct teleport to Butterfly Bloom spawn meadow"] = "Dịch chuyển trực tiếp đến bãi hoa xuất hiện bướm",
+    ["Interact with Net Stand inside tree to claim net"] = "Tương tác với giá để nhận vợt bắt bướm bên trong cây",
     ["Farm Halloween candies, souls & ghost train boss"] = "Tự động nhặt kẹo, linh hồn và đánh boss tàu ma",
+    ["Teleport through portal into Halloween Dimension"] = "Dịch chuyển qua cổng vào thế giới ma Halloween",
+    ["Return from Halloween Dimension to main lobby"] = "Rời thế giới ma quay trở về sảnh chính",
+    ["Instantly purchase an egg at Halloween Shop (2,250 Tokens)"] = "Mua ngay 1 quả trứng ma tại quầy (2.250 Tokens)",
+    ["Board the ghost train when arriving at the station"] = "Nhảy lên tàu ma khi tàu cập bến tại ga",
+    ["Activate vacuum suction for floating event candies"] = "Bật lực hút tự động gom kẹo và linh hồn bay quanh tàu",
     ["Auto complete Squid Game style minigame safely"] = "Tự động vượt qua minigame đèn xanh đèn đỏ an toàn",
     ["Auto run & dodge obstacles in T-Rex temple run"] = "Tự động chạy và né chướng ngại vật trong đền T-Rex",
     ["Prevent ragdoll & stun status from heavy hits"] = "Ngăn chặn trạng thái choáng và ngã ngửa khi bị đánh",
