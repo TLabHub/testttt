@@ -5090,22 +5090,22 @@ end
 local function Q(C,t,A)if type(C)~="table"then return false
 end
 local p=rawget(C,"RootPart")
-local D=p and p.Parent and p.CFrame or nil
-local M=D and D.Position or nil
-local I=typeof(A)=="Vector3"and A or Vector3.new(0.0,0.0,0.0)
+local rootCF=p and p.Parent and p.CFrame or nil
+local rootPos=rootCF and rootCF.Position or nil
+local rootVel=typeof(A)=="Vector3"and A or Vector3.new(0.0,0.0,0.0)
 local function e(z)if type(z)=="table"then rawset(z,"WalkSpeed",t)
-if D then rawset(z,"CFrame",D)
-rawset(z,"Position",M)
-rawset(z,"LinearVelocity",I)
+if rootCF then rawset(z,"CFrame",rootCF)
+rawset(z,"Position",rootPos)
+rawset(z,"LinearVelocity",rootVel)
 rawset(z,"AngularVelocity",(Vector3.new(0.0,0.0,0.0)))
 end
 end
 end
-for D,D in ipairs(J)do e(rawget(C,D))
+for _,fieldKey in ipairs(J)do e(rawget(C,fieldKey))
 end
-for J,J in pairs(rawget(C,"SampleHistory")or{})do e(J)
+for _,sample in pairs(rawget(C,"SampleHistory")or{})do e(sample)
 end
-for J,J in pairs(rawget(C,"SafeGroundCheckpoints")or{})do e(J)
+for _,ckpt in pairs(rawget(C,"SafeGroundCheckpoints")or{})do e(ckpt)
 end
 A=rawget(C,"Evidence")
 if type(A)=="table"then A.Speed=0
@@ -7261,22 +7261,22 @@ end
 local function Xi(Ji,mJ,uJ)if type(Ji)~="table"then return false
 end
 local tJ=rawget(Ji,"RootPart")
-local AJ=tJ and tJ.Parent and tJ.CFrame or nil
-local pJ=AJ and AJ.Position or nil
-local dJ=typeof(uJ)=="Vector3"and uJ or Vector3.new(0.0,0.0,0.0)
+local rootCF_2=tJ and tJ.Parent and tJ.CFrame or nil
+local rootPos_2=rootCF_2 and rootCF_2.Position or nil
+local rootVel_2=typeof(uJ)=="Vector3"and uJ or Vector3.new(0.0,0.0,0.0)
 local function DJ(oJ)if type(oJ)=="table"then rawset(oJ,"WalkSpeed",mJ)
-if AJ then rawset(oJ,"CFrame",AJ)
-rawset(oJ,"Position",pJ)
-rawset(oJ,"LinearVelocity",dJ)
+if rootCF_2 then rawset(oJ,"CFrame",rootCF_2)
+rawset(oJ,"Position",rootPos_2)
+rawset(oJ,"LinearVelocity",rootVel_2)
 rawset(oJ,"AngularVelocity",(Vector3.new(0.0,0.0,0.0)))
 end
 end
 end
-for AJ,AJ in ipairs(si)do DJ(rawget(Ji,AJ))
+for _,fieldKey in ipairs(si)do DJ(rawget(Ji,fieldKey))
 end
-for si,si in pairs(rawget(Ji,"SampleHistory")or{})do DJ(si)
+for _,sample in pairs(rawget(Ji,"SampleHistory")or{})do DJ(sample)
 end
-for si,si in pairs(rawget(Ji,"SafeGroundCheckpoints")or{})do DJ(si)
+for _,ckpt in pairs(rawget(Ji,"SafeGroundCheckpoints")or{})do DJ(ckpt)
 end
 tJ=rawget(Ji,"Evidence")
 if type(tJ)=="table"then tJ.Speed=0
@@ -31834,9 +31834,8 @@ end
 end
 end
 end
-x = true
-end
-w()
+    x = true
+    return li
 end
 
 return initChulluHub(...)
